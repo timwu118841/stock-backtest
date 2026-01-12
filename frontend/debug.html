@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>回測數據調試頁面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        button {
+            background-color: #409eff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #66b1ff;
+        }
+        #result {
+            margin-top: 20px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #409eff;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 回測數據調試工具</h1>
+    <p>點擊按鈕測試後端 API 是否正常返回完整數據</p>
+    
+    <button onclick="testBacktest()">執行台積電 DCA 回測</button>
+    
+    <div id="result"></div>
+    <div id="trades"></div>
+
+    <script>
+        async function testBacktest() {
+            const resultDiv = document.getElementById('result');
+            const tradesDiv = document.getElementById('trades');
+            
+            resultDiv.textContent = '正在執行回測...';
+            tradesDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/backtest/run', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        strategy_name: "台積電DCA測試",
+                        stock_symbol: "2330.TW",
+                        start_date: "2020-01-01",
+                        end_date: "2026-01-01",
+                        initial_capital: 1000000,
+                        strategy_type: "DCA",
+                        dca_amount: 10000,
+                        dca_day: 1
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // 顯示摘要信息
+                let summary = `
+✅ 回測成功完成！
+
+📊 基本信息：
+   策略名稱: ${data.strategy_name}
+   股票代碼: ${data.stock_symbol}
+   回測期間: ${data.start_date} ~ ${data.end_date}
+   
+💰 績效摘要：
+   初始資金: $${data.initial_capital.toLocaleString()}
+   最終資金: $${data.final_capital.toLocaleString()}
+   總報酬率: ${data.summary.total_return}%
+   
+📈 交易統計：
+   總交易筆數: ${data.trades.length} 筆
+   第一筆: ${data.trades[0].date}
+   最後一筆: ${data.trades[data.trades.length - 1].date}
+`;
+                
+                resultDiv.textContent = summary;
+                
+                // 顯示所有交易
+                let table = `
+                    <h2>所有交易明細 (共 ${data.trades.length} 筆)</h2>
+                    <table>
+                        <tr>
+                            <th>#</th>
+                            <th>日期</th>
+                            <th>操作</th>
+                            <th>股數</th>
+                            <th>價格</th>
+                            <th>金額</th>
+                            <th>餘額</th>
+                        </tr>
+                `;
+                
+                data.trades.forEach((trade, index) => {
+                    table += `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td>${trade.date}</td>
+                            <td>${trade.action}</td>
+                            <td>${trade.shares}</td>
+                            <td>$${trade.price}</td>
+                            <td>$${trade.value.toLocaleString()}</td>
+                            <td>$${trade.balance.toLocaleString()}</td>
+                        </tr>
+                    `;
+                });
+                
+                table += '</table>';
+                tradesDiv.innerHTML = table;
+                
+            } catch (error) {
+                resultDiv.textContent = `❌ 錯誤: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
