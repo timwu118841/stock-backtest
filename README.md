@@ -1,5 +1,7 @@
 # 股票策略回測系統 (Stock Backtesting System)
 
+**🚀 已部署上線！免費使用！**
+
 這是一個功能強大的全端股票策略回測系統，旨在幫助投資者與開發者測試、比較並優化其投資策略。系統結合了 Python 的強大計算能力（FastAPI, Pandas, yfinance）與 Vue 3 的現代化視覺化前端（Element Plus, ECharts）。
 
 ## 🚀 系統概述
