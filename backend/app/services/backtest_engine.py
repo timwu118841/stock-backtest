@@ -17,6 +17,9 @@ from app.models.backtest import (
     TradeRecord,
     StrategyType,
     InvestmentInterval,
+    OptimizeRequest,
+    OptimizeResult,
+    OptimizeTarget,
 )
 
 
@@ -1139,3 +1142,369 @@ def run_multi_stock_dca(request: BacktestRequest, backtest_id: int) -> BacktestR
             ],
         },
     )
+
+
+def optimize_dca_allocation(request: OptimizeRequest) -> OptimizeResult:
+    """
+    Optimizes asset allocation for DCA strategy using Monte Carlo Simulation.
+
+    Algorithm:
+    1. Fetches historical data for all requested stocks.
+    2. Aligns data to a common timeline.
+    3. Runs 1000 simulations with random weight distributions.
+    4. For each simulation, reconstructs the daily equity curve to calculate Sharpe Ratio.
+    5. Returns the allocation with the highest Sharpe Ratio.
+    """
+    if not request.stocks or len(request.stocks) < 2:
+        raise ValueError("Allocation optimization requires at least 2 stocks")
+
+    stock_dfs = {}
+    dates = None
+    common_dates = None
+
+    try:
+        for symbol in request.stocks:
+            temp_req = BacktestRequest(
+                strategy_name="temp",
+                stock_symbol=symbol,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                strategy_type=StrategyType.DCA,
+                dca_day=request.dca_day or 1,
+                dca_month=request.dca_month or 1,
+            )
+            engine = BacktestEngine(temp_req)
+            df = engine.fetch_data()
+
+            clean_df = df[["Date", "Close"]].copy()
+            clean_df["Date"] = pd.to_datetime(clean_df["Date"])
+            clean_df.set_index("Date", inplace=True)
+
+            if common_dates is None:
+                common_dates = clean_df.index
+            else:
+                common_dates = common_dates.intersection(clean_df.index)
+
+            stock_dfs[symbol] = clean_df
+
+        if len(common_dates) == 0:
+            raise ValueError("No overlapping dates found for the selected stocks")
+
+        aligned_prices = {}
+        for symbol in request.stocks:
+            aligned_prices[symbol] = stock_dfs[symbol].loc[common_dates]["Close"].values
+
+        dca_indices = []
+        dates_list = common_dates.tolist()
+
+        last_period = -1
+        for i, date in enumerate(dates_list):
+            current_period = (
+                date.month
+                if request.dca_interval == InvestmentInterval.MONTHLY
+                else date.year
+            )
+
+            if current_period != last_period:
+                dca_indices.append(i)
+                last_period = current_period
+
+        num_simulations = 1000
+        best_sharpe = -float("inf")
+        best_return = -float("inf")
+        best_allocation = {}
+
+        price_matrix = np.array([aligned_prices[s] for s in request.stocks]).T
+        n_days = price_matrix.shape[0]
+        n_stocks = len(request.stocks)
+
+        for _ in range(num_simulations):
+            weights = np.random.random(n_stocks)
+            weights /= weights.sum()
+
+            dca_amount = request.dca_amount
+            total_invested = 0
+
+            shares = np.zeros(n_stocks)
+            equity_curve = np.zeros(n_days)
+            current_shares_dynamic = np.zeros(n_stocks)
+
+            last_idx = 0
+            for d_idx in dca_indices:
+                if d_idx > last_idx:
+                    period_values = np.dot(
+                        price_matrix[last_idx:d_idx], current_shares_dynamic
+                    )
+                    equity_curve[last_idx:d_idx] = period_values + (
+                        total_invested - dca_amount if total_invested > 0 else 0
+                    )
+
+                current_prices = price_matrix[d_idx]
+                money_alloc = dca_amount * weights
+                new_shares = np.floor(money_alloc / current_prices)
+                current_shares_dynamic += new_shares
+                total_invested += dca_amount
+
+                last_idx = d_idx
+
+            if last_idx < n_days:
+                period_values = np.dot(price_matrix[last_idx:], current_shares_dynamic)
+                equity_curve[last_idx:] = period_values
+
+            final_equity = equity_curve[-1] if equity_curve[-1] > 0 else 0
+            total_return_pct = (
+                (final_equity - total_invested) / total_invested * 100
+                if total_invested > 0
+                else 0
+            )
+
+            equity_series = pd.Series(equity_curve)
+            equity_series = equity_series[equity_series > 0]
+
+            sharpe = 0
+            if len(equity_series) > 10:
+                pct_change = equity_series.pct_change().dropna()
+                std = pct_change.std()
+                if std > 0:
+                    sharpe = (pct_change.mean() / std) * np.sqrt(252)
+
+            if sharpe > best_sharpe:
+                best_sharpe = sharpe
+                best_return = total_return_pct
+                best_allocation = {
+                    symbol: float(w) for symbol, w in zip(request.stocks, weights)
+                }
+
+        return OptimizeResult(
+            best_return=round(best_return, 2),
+            best_sharpe=round(best_sharpe, 2),
+            best_allocation={k: round(v, 4) for k, v in best_allocation.items()},
+            heatmap_data=[],
+        )
+
+    except Exception as e:
+        raise ValueError(f"Optimization failed: {str(e)}")
+
+
+def optimize_dca_allocation(request: OptimizeRequest) -> OptimizeResult:
+    """
+    DCA 資產配置最佳化 (Monte Carlo Simulation)
+
+    1. 獲取所有股票數據
+    2. 隨機生成 N 組權重
+    3. 快速回測計算 Sharpe Ratio
+    4. 返回最佳組合
+    """
+    if not request.stocks or len(request.stocks) < 2:
+        raise ValueError("Allocation optimization requires at least 2 stocks")
+
+    # 1. 獲取數據 (Fetch Data Once)
+    stock_dfs = {}
+    dates = None
+
+    # 建立一個臨時的 BacktestRequest 來獲取數據
+    # 我們需要確保所有股票都在相同的時間範圍內對齊
+    try:
+        common_dates = None
+
+        for symbol in request.stocks:
+            temp_req = BacktestRequest(
+                strategy_name="temp",
+                stock_symbol=symbol,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                strategy_type=StrategyType.DCA,
+                dca_day=1,  # Default
+            )
+            engine = BacktestEngine(temp_req)
+            df = engine.fetch_data()
+
+            # 只保留需要的列
+            clean_df = df[["Date", "Close"]].copy()
+            clean_df["Date"] = pd.to_datetime(clean_df["Date"])
+            clean_df.set_index("Date", inplace=True)
+
+            if common_dates is None:
+                common_dates = clean_df.index
+            else:
+                common_dates = common_dates.intersection(clean_df.index)
+
+            stock_dfs[symbol] = clean_df
+
+        if len(common_dates) == 0:
+            raise ValueError("No overlapping dates found for the selected stocks")
+
+        # 對齊數據
+        aligned_prices = {}  # {symbol: numpy_array_of_prices}
+        for symbol in request.stocks:
+            aligned_prices[symbol] = stock_dfs[symbol].loc[common_dates]["Close"].values
+
+        # 產生 DCA 信號 (使用每個月/年的第一天，或最接近的交易日)
+        # 這裡簡化處理：找出每個月的第一個交易日索引
+        dca_indices = []
+        dates_list = common_dates.tolist()
+
+        last_period = -1
+        for i, date in enumerate(dates_list):
+            current_period = (
+                date.month
+                if request.dca_interval == InvestmentInterval.MONTHLY
+                else date.year
+            )
+
+            if current_period != last_period:
+                # 換月/換年，這一天是該週期的第一天
+                dca_indices.append(i)
+                last_period = current_period
+
+        # 2. Monte Carlo Simulation
+        num_simulations = 1000
+        best_sharpe = -float("inf")
+        best_return = -float("inf")
+        best_allocation = {}
+
+        results = []  # for heatmap-like visualization or just logic
+
+        # 轉換為 numpy 陣列加速運算
+        price_matrix = np.array(
+            [aligned_prices[s] for s in request.stocks]
+        ).T  # (Days, Stocks)
+        n_days = price_matrix.shape[0]
+        n_stocks = len(request.stocks)
+
+        # 預先計算每日報酬率 (用於 Sharpe 計算)
+        # log_returns = np.diff(np.log(price_matrix), axis=0) # 簡化：我們直接用權益曲線算
+
+        for _ in range(num_simulations):
+            # 生成隨機權重 sum=1
+            weights = np.random.random(n_stocks)
+            weights /= weights.sum()
+
+            # 快速模擬 DCA
+            # 總投入
+            dca_amount = request.dca_amount
+            total_invested = 0
+
+            # 持有股數
+            shares = np.zeros(n_stocks)
+
+            # 現金 (簡化：假設全部買入，忽略餘額累積，或精確計算)
+            # 精確計算：
+            # 在每個 dca_index:
+            #   money_for_stock_i = dca_amount * weight_i
+            #   shares_bought_i = money_for_stock_i // price_i
+            #   cost_i = shares_bought_i * price_i
+            #   (忽略剩餘現金，因為影響很小)
+
+            # 為了向量化加速，我們建立一個 injection matrix
+            # 但 loop dca_indices 已經夠快了 (最多 250 個月)
+
+            for idx in dca_indices:
+                current_prices = price_matrix[idx]
+                money_alloc = dca_amount * weights
+
+                # 向下取整買入股數
+                new_shares = np.floor(money_alloc / current_prices)
+                shares += new_shares
+
+                # 累計投入 (假設全部 dca_amount 都算投入，即使有剩餘零錢)
+                total_invested += dca_amount
+
+            # 計算最終價值
+            final_prices = price_matrix[-1]
+            final_value = np.sum(shares * final_prices)
+
+            # 總報酬率
+            total_return_pct = (
+                (final_value - total_invested) / total_invested * 100
+                if total_invested > 0
+                else 0
+            )
+
+            # 計算 Sharpe (需要權益曲線)
+            # 這裡做一個權衡：計算每日權益曲線比較慢。
+            # 我們可以用 "加權後的股票每日報酬率" 來近似 Portfolio 波動率
+            # 但 DCA 的權益曲線形狀跟 Lump Sum 不一樣。
+            # 為了準確，我們必須構建權益曲線。
+
+            # 構建每日持倉市值
+            # shares 是一個隨時間變化的階梯函數
+            # 我們可以構建一個 shares_history 矩陣 (Days, Stocks)
+            shares_history = np.zeros((n_days, n_stocks))
+
+            current_shares_dynamic = np.zeros(n_stocks)
+            dca_idx_set = set(dca_indices)
+
+            # 這部分 loop n_days (252*N) * 1000 次可能有點慢。
+            # 優化：shares 只在 dca_indices 改變。
+            # 我們可以分段計算。
+
+            equity_curve = np.zeros(n_days)
+
+            last_idx = 0
+            for d_idx in dca_indices:
+                # 填補上一段的市值 (持有股數不變)
+                if d_idx > last_idx:
+                    # price_matrix[last_idx:d_idx] (TimeSlice, Stocks)
+                    # current_shares_dynamic (Stocks)
+                    # dot product -> (TimeSlice)
+                    period_values = np.dot(
+                        price_matrix[last_idx:d_idx], current_shares_dynamic
+                    )
+                    equity_curve[last_idx:d_idx] = period_values + (
+                        total_invested - dca_amount if total_invested > 0 else 0
+                    )  # 加上剩餘現金? 忽略
+
+                # 執行買入
+                current_prices = price_matrix[d_idx]
+                money_alloc = dca_amount * weights
+                new_shares = np.floor(money_alloc / current_prices)
+                current_shares_dynamic += new_shares
+                total_invested += dca_amount  # 這裡要注意 total_invested 是隨時間增加的
+
+                last_idx = d_idx
+
+            # 填補最後一段
+            if last_idx < n_days:
+                period_values = np.dot(price_matrix[last_idx:], current_shares_dynamic)
+                equity_curve[last_idx:] = period_values
+
+            # 計算 Sharpe
+            # 簡單版 Sharpe: 基於每日權益變化的回報
+            equity_series = pd.Series(equity_curve)
+            # 過濾掉前面為0的部分
+            equity_series = equity_series[equity_series > 0]
+
+            sharpe = 0
+            if len(equity_series) > 10:
+                pct_change = equity_series.pct_change().dropna()
+                std = pct_change.std()
+                if std > 0:
+                    sharpe = (pct_change.mean() / std) * np.sqrt(252)
+
+            # 記錄
+            is_better = False
+            if request.optimization_target == OptimizeTarget.ROI:
+                if total_return_pct > best_return:
+                    is_better = True
+            else:  # Default to SHARPE
+                if sharpe > best_sharpe:
+                    is_better = True
+
+            if is_better:
+                best_sharpe = sharpe
+                best_return = total_return_pct
+                best_allocation = {
+                    symbol: float(w) for symbol, w in zip(request.stocks, weights)
+                }
+
+        # 返回結果
+        return OptimizeResult(
+            best_return=round(best_return, 2),
+            best_sharpe=round(best_sharpe, 2),
+            best_allocation={k: round(v, 4) for k, v in best_allocation.items()},
+            heatmap_data=[],  # Allocation doesn't produce a 2D heatmap easily
+        )
+
+    except Exception as e:
+        raise ValueError(f"Optimization failed: {str(e)}")

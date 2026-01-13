@@ -13,7 +13,7 @@ from app.models.backtest import (
     BacktestRequest,
     StrategyType,
 )
-from app.services.backtest_engine import BacktestEngine
+from app.services.backtest_engine import BacktestEngine, optimize_dca_allocation
 from app.routers.backtest import backtest_results_db
 
 router = APIRouter(prefix="/api/strategy", tags=["Strategy"])
@@ -70,10 +70,17 @@ async def compare_strategies(request: CompareRequest):
 @router.post("/optimize", response_model=OptimizeResult)
 async def optimize_strategy(request: OptimizeRequest):
     """
-    執行網格搜尋參數最佳化
+    執行策略參數最佳化
 
-    針對雙均線策略，搜尋最佳的短週期與長週期組合
+    - DCA: 執行資產配置最佳化 (Monte Carlo)
+    - 其他: 執行參數網格搜尋 (Grid Search)
     """
+    if request.strategy_type == StrategyType.DCA:
+        try:
+            return optimize_dca_allocation(request)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
     try:
         # 建立參數網格
         param1_values = list(

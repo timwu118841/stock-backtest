@@ -22,6 +22,11 @@ class InvestmentInterval(str, Enum):
     YEARLY = "YEARLY"  # 每年投入
 
 
+class OptimizeTarget(str, Enum):
+    SHARPE = "SHARPE"  # 夏普比率 (風險調整後回報)
+    ROI = "ROI"  # 總報酬率 (Total Return)
+
+
 class StockAllocation(BaseModel):
     """股票配置（用於多股票DCA）"""
 
@@ -182,22 +187,35 @@ class OptimizeRequest(BaseModel):
     stock_symbol: str
     start_date: str
     end_date: str
-    param1_range: List[int]  # [min, max]
-    param1_step: int
-    param2_range: List[int]
-    param2_step: int
+    param1_range: Optional[List[int]] = None  # [min, max]
+    param1_step: Optional[int] = None
+    param2_range: Optional[List[int]] = None
+    param2_step: Optional[int] = None
+
+    # DCA Allocation Optimization specific
+    stocks: Optional[List[str]] = (
+        None  # List of stock symbols for allocation optimization
+    )
+    dca_amount: Optional[float] = 10000
+    dca_interval: Optional[InvestmentInterval] = InvestmentInterval.MONTHLY
+    dca_day: Optional[int] = 1
+    dca_month: Optional[int] = 1
+    optimization_target: Optional[OptimizeTarget] = OptimizeTarget.SHARPE
 
 
 class OptimizeResult(BaseModel):
     """最佳化結果"""
 
-    best_param1: int
-    best_param2: int
+    best_param1: Optional[int] = None
+    best_param2: Optional[int] = None
     best_return: float
     best_sharpe: float
-    heatmap_data: List[List[Any]]  # [[x, y, value], ...]
-    x_labels: List[int]
-    y_labels: List[int]
+    heatmap_data: Optional[List[List[Any]]] = None  # [[x, y, value], ...]
+    x_labels: Optional[List[int]] = None
+    y_labels: Optional[List[int]] = None
+
+    # Allocation Result
+    best_allocation: Optional[Dict[str, float]] = None  # {symbol: ratio}
 
 
 class CompareRequest(BaseModel):
