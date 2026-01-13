@@ -617,6 +617,12 @@ const exportTradesCsv = () => {
           </div>
         </el-card>
         <el-card shadow="hover" class="metric-card">
+          <div class="metric-label">年化報酬率</div>
+          <div class="metric-value" :class="resultData.summary.annualized_return >= 0 ? 'text-success' : 'text-danger'">
+            {{ resultData.summary.annualized_return >= 0 ? '+' : '' }}{{ resultData.summary.annualized_return }}%
+          </div>
+        </el-card>
+        <el-card shadow="hover" class="metric-card">
           <div class="metric-label">夏普比率</div>
           <div class="metric-value">{{ resultData.summary.sharpe_ratio }}</div>
         </el-card>
@@ -774,7 +780,13 @@ const exportTradesCsv = () => {
 
 @media (min-width: 1024px) {
   .metrics-grid {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1400px) {
+  .metrics-grid {
+    grid-template-columns: repeat(5, 1fr);
   }
 }
 
