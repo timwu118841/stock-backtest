@@ -396,11 +396,15 @@ class BacktestEngine:
                 # DCA 策略：每月自動補充資金買入，模擬真實定期定額
                 if signal == 1:
                     dca_amount = self.request.dca_amount
-                    # 每月自動補充現金（模擬每月薪水投入）
                     cash += dca_amount
-                    self.total_invested += dca_amount  # DCA 也要累加總投入
+                    self.total_invested += dca_amount
 
-                    buy_shares = int(dca_amount // price)
+                    # 防止零價格導致除零錯誤
+                    if price > 0:
+                        buy_shares = int(dca_amount // price)
+                    else:
+                        buy_shares = 0
+
                     if buy_shares > 0:
                         cost = buy_shares * price
                         cash -= cost
@@ -426,10 +430,8 @@ class BacktestEngine:
                                 value=round(cost, 2),
                                 balance=round(cash, 2),
                                 total_assets=round(cash + shares * price, 2),
-                                pnl=round(unrealized_pnl_pct, 2),  # 未實現報酬率(%)
-                                pnl_amount=round(
-                                    unrealized_pnl_amount, 2
-                                ),  # 未實現損益金額
+                                pnl=round(unrealized_pnl_pct, 2),
+                                pnl_amount=round(unrealized_pnl_amount, 2),
                             )
                         )
             else:
@@ -448,12 +450,15 @@ class BacktestEngine:
 
                 can_buy = False
                 if signal == 1:
-                    # 如果是反轉策略(如 RSI)，通常是空手才買。但如果有新資金，應該允許加碼。
-                    # 我們採取：有 BUY 訊號就用盡現金買入。
                     can_buy = True
 
                 if can_buy:
-                    buy_shares = int(cash // price)
+                    # 防止零價格導致除零錯誤
+                    if price > 0:
+                        buy_shares = int(cash // price)
+                    else:
+                        buy_shares = 0
+
                     if buy_shares > 0:
                         cost = buy_shares * price
                         cash -= cost
@@ -617,9 +622,8 @@ class BacktestEngine:
 
             # 對於 DCA 策略，計算方式不同
             if self.request.strategy_type == StrategyType.DCA:
-                # ... (略)
-                buy_trades = [t for t in self.trades if t.action == "BUY"]
-                total_invested = sum(t.value for t in buy_trades)
+                # 使用已追蹤的總投入金額（包含 initial_capital + 所有 DCA 注入）
+                total_invested = self.total_invested
                 if total_invested > 0:
                     total_return = ((final - total_invested) / total_invested) * 100
                 else:
@@ -629,9 +633,12 @@ class BacktestEngine:
                 days = len(self.equity_curve)
                 years = days / 252
                 if years > 0 and total_invested > 0:
-                    annualized_return = (
-                        (final / total_invested) ** (1 / years) - 1
-                    ) * 100
+                    # 避免負數底數的冪運算導致複數或錯誤
+                    ratio = final / total_invested
+                    if ratio > 0:
+                        annualized_return = (ratio ** (1 / years) - 1) * 100
+                    else:
+                        annualized_return = -100  # 全虧
                 else:
                     annualized_return = 0
             else:
@@ -675,10 +682,14 @@ class BacktestEngine:
 
             # 最大回撤
             cummax = equity_series.cummax()
-            # 避免除以零
-            cummax = cummax.replace(0, 1)
-            drawdown = (equity_series - cummax) / cummax
-            max_drawdown = drawdown.min() * 100
+            # 只在 cummax > 0 時計算回撤，避免除以零或初始為0的情況
+            safe_cummax = cummax.where(cummax > 0, np.nan)
+            drawdown = (equity_series - safe_cummax) / safe_cummax
+            valid_drawdown = drawdown.dropna()
+            if len(valid_drawdown) > 0:
+                max_drawdown = valid_drawdown.min() * 100
+            else:
+                max_drawdown = 0
 
             # 交易統計 (略)
             # ... (這部分沒動，應該沒事) ...
@@ -941,7 +952,12 @@ def run_multi_stock_dca(request: BacktestRequest, backtest_id: int) -> BacktestR
 
                 if not stock_row.empty:
                     price = stock_row.iloc[0]["Close"]
-                    buy_shares = int(amount // price)
+
+                    # 防止零價格導致除零錯誤
+                    if price > 0:
+                        buy_shares = int(amount // price)
+                    else:
+                        buy_shares = 0
 
                     if buy_shares > 0:
                         cost = buy_shares * price
@@ -1034,9 +1050,14 @@ def run_multi_stock_dca(request: BacktestRequest, backtest_id: int) -> BacktestR
 
     # 3. 最大回撤
     cummax = equity_series.cummax()
-    cummax = cummax.replace(0, 1)  # 避免除以零
-    drawdown = (equity_series - cummax) / cummax
-    max_drawdown = drawdown.min() * 100
+    # 只在 cummax > 0 時計算回撤，避免除以零或初始為0的情況
+    safe_cummax = cummax.where(cummax > 0, np.nan)
+    drawdown = (equity_series - safe_cummax) / safe_cummax
+    valid_drawdown = drawdown.dropna()
+    if len(valid_drawdown) > 0:
+        max_drawdown = valid_drawdown.min() * 100
+    else:
+        max_drawdown = 0
 
     # 4. 交易統計 (DCA策略)
     buy_trades = [t for t in all_trades if t.action == "BUY"]

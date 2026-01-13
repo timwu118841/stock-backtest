@@ -354,7 +354,7 @@ const exportTradesCsv = () => {
           </el-col>
           <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="初始資金">
-              <el-input-number v-model="backtestForm.initialCapital" :min="10000" :step="100000" style="width: 100%" />
+              <el-input-number v-model="backtestForm.initialCapital" :min="0" :step="100000" style="width: 100%" />
             </el-form-item>
           </el-col>
         

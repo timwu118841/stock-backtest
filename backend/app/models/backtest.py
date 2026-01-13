@@ -43,7 +43,7 @@ class BacktestRequest(BaseModel):
     stock_symbol: str
     start_date: str  # YYYY-MM-DD
     end_date: str
-    initial_capital: float = 1000000
+    initial_capital: float = Field(default=1000000, ge=0)  # 最低為 0
     strategy_type: StrategyType = StrategyType.MA_CROSS
 
     # MA Cross 參數
