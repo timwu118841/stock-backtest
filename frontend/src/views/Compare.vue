@@ -70,7 +70,16 @@ const runCompare = async () => {
     renderChart()
 
   } catch (error) {
-    ElMessage.error('比較失敗: ' + (error.response?.data?.detail || error.message))
+    const errorMsg = error.response?.data?.detail || error.message
+    
+    if (errorMsg && errorMsg.includes('找不到 ID')) {
+      ElMessage.warning('策略列表已過期，正在重新載入...')
+      selectedStrategyIds.value = []
+      await fetchStrategies()
+      ElMessage.info('請重新選擇策略')
+    } else {
+      ElMessage.error('比較失敗: ' + errorMsg)
+    }
   } finally {
     isComparing.value = false
   }
