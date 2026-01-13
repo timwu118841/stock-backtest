@@ -16,6 +16,7 @@ from app.models.backtest import (
     EquityData,
     TradeRecord,
     StrategyType,
+    InvestmentInterval,
 )
 
 
@@ -111,6 +112,8 @@ class BacktestEngine:
         # 通用：計算日期資訊供定期注資使用
         df["Day"] = pd.to_datetime(df["Date"]).dt.day
         df["Month"] = pd.to_datetime(df["Date"]).dt.to_period("M")
+        df["MonthNum"] = pd.to_datetime(df["Date"]).dt.month  # 月份數字 (1-12)
+        df["Year"] = pd.to_datetime(df["Date"]).dt.to_period("Y")  # 新增年度資訊
 
         self.df = df
 
@@ -177,26 +180,60 @@ class BacktestEngine:
             df.loc[df["Close"] > df["BB_Upper"], "Signal"] = -1
 
         elif strategy == StrategyType.DCA:
-            # DCA: 每月指定日期買入（找該月最接近指定日的交易日）
+            # DCA: 每月或每年指定日期買入（找該週期最接近指定日的交易日）
             target_day = self.request.dca_day
-            seen_months = set()
+            target_month = self.request.dca_month  # 年度投入時使用
+            interval = self.request.dca_interval
+            seen_periods = set()
 
             for idx, row in df.iterrows():
-                month = row["Month"]
                 day = row["Day"]
+                month_num = row["MonthNum"]
 
-                # 每個月只買一次，選擇最接近目標日的交易日
-                if month not in seen_months and day >= target_day:
-                    df.loc[idx, "Signal"] = 1
-                    seen_months.add(month)
-                # 如果月底還沒買到，就在該月最後一天買
-                elif month not in seen_months:
-                    next_idx = idx + 1
-                    if next_idx < len(df):
-                        next_month = df.loc[next_idx, "Month"]
-                        if next_month != month:
+                if interval == InvestmentInterval.YEARLY:
+                    # 年度投入：檢查是否為目標年份的目標月份和日期
+                    year = row["Year"]
+
+                    # 每年只買一次，檢查是否為目標月份
+                    if year not in seen_periods and month_num == target_month:
+                        # 在目標月份中，找到最接近目標日期的交易日
+                        if day >= target_day:
                             df.loc[idx, "Signal"] = 1
-                            seen_months.add(month)
+                            seen_periods.add(year)
+                        else:
+                            # 檢查是否為該月最後一天
+                            next_idx = idx + 1
+                            if next_idx < len(df):
+                                next_month = df.loc[next_idx, "MonthNum"]
+                                next_year = df.loc[next_idx, "Year"]
+                                # 如果下一筆資料不是同月，表示這是該月最後一筆
+                                if next_month != month_num or next_year != year:
+                                    df.loc[idx, "Signal"] = 1
+                                    seen_periods.add(year)
+                            else:
+                                # 最後一筆資料
+                                df.loc[idx, "Signal"] = 1
+                                seen_periods.add(year)
+                else:
+                    # 月度投入：每月指定日期買入
+                    period = row["Month"]
+
+                    # 每個月只買一次，選擇最接近目標日的交易日
+                    if period not in seen_periods and day >= target_day:
+                        df.loc[idx, "Signal"] = 1
+                        seen_periods.add(period)
+                    # 如果月底還沒買到，就在該月最後一天買
+                    elif period not in seen_periods:
+                        next_idx = idx + 1
+                        if next_idx < len(df):
+                            next_period = df.loc[next_idx, "Month"]
+                            if next_period != period:
+                                df.loc[idx, "Signal"] = 1
+                                seen_periods.add(period)
+                        else:
+                            # 最後一筆資料
+                            df.loc[idx, "Signal"] = 1
+                            seen_periods.add(period)
 
         elif strategy == StrategyType.SMA_BREAKOUT:
             # 價格上穿 SMA -> 買入
@@ -233,7 +270,7 @@ class BacktestEngine:
         trades = []
         entry_price = 0.0
         self.total_invested = cash  # 初始化總投入本金
-        seen_months = set()
+        seen_periods = set()  # 改用通用的週期追蹤
 
         for idx, row in df.iterrows():
             price = row["Close"]
@@ -244,37 +281,114 @@ class BacktestEngine:
             # 如果設定了每月投入金額，則每月發薪日自動補充現金
             if strategy != StrategyType.DCA and self.request.dca_amount > 0:
                 day = row.get("Day")
-                month = row.get("Month")
+                month_num = row.get("MonthNum")
+
+                if self.request.dca_interval == InvestmentInterval.YEARLY:
+                    # 年度注資
+                    year = row.get("Year")
+                    target_month = self.request.dca_month
+
+                    if (
+                        day is not None
+                        and year is not None
+                        and month_num == target_month
+                    ):
+                        target_day = self.request.dca_day
+                        is_payday = False
+
+                        if year not in seen_periods:
+                            if day >= target_day:
+                                is_payday = True
+                            else:
+                                # 檢查是否為該月最後一筆數據
+                                next_idx = idx + 1
+                                if next_idx >= len(df):
+                                    is_payday = True
+                                else:
+                                    next_month = df.iloc[next_idx]["MonthNum"]
+                                    next_year = df.iloc[next_idx]["Year"]
+                                    if next_month != month_num or next_year != year:
+                                        is_payday = True
+
+                        if is_payday:
+                            dca_amount = self.request.dca_amount
+                            cash += dca_amount
+                            self.total_invested += dca_amount
+                            seen_periods.add(year)
+                            print(
+                                f"DEBUG: Payday! Year={year}, Month={month_num}, Day={day}, Added={dca_amount}, Total Invested={self.total_invested}"
+                            )
+                else:
+                    # 月度注資
+                    period = row.get("Month")
+
+                    # Debug print (只印第一天)
+                    if idx == 0:
+                        print(
+                            f"DEBUG: DCA Amount={self.request.dca_amount}, Day={day}, Period={period}"
+                        )
+
+                    if day is not None and period is not None:
+                        target_day = self.request.dca_day
+                        is_payday = False
+
+                        if period not in seen_periods:
+                            if day >= target_day:
+                                is_payday = True
+                            else:
+                                # 檢查是否為該週期最後一筆數據
+                                next_idx = idx + 1
+                                if next_idx >= len(df):
+                                    is_payday = True
+                                else:
+                                    next_period = df.iloc[next_idx]["Month"]
+                                    if next_period != period:
+                                        is_payday = True
+
+                        if is_payday:
+                            dca_amount = self.request.dca_amount
+                            cash += dca_amount
+                            self.total_invested += dca_amount
+                            seen_periods.add(period)
+                            print(
+                                f"DEBUG: Payday! Period={period}, Added={dca_amount}, Total Invested={self.total_invested}"
+                            )
 
                 # Debug print (只印第一天)
                 if idx == 0:
                     print(
-                        f"DEBUG: DCA Amount={self.request.dca_amount}, Day={day}, Month={month}"
+                        f"DEBUG: DCA Amount={self.request.dca_amount}, Day={day}, Period={period}"
                     )
 
-                if day is not None and month is not None:
+                if day is not None and period is not None:
                     target_day = self.request.dca_day
                     is_payday = False
 
-                    if month not in seen_months:
+                    if period not in seen_periods:
                         if day >= target_day:
                             is_payday = True
                         else:
-                            # 檢查是否為該月最後一筆數據
+                            # 檢查是否為該週期最後一筆數據
                             next_idx = idx + 1
-                            if (
-                                next_idx >= len(df)
-                                or df.iloc[next_idx]["Month"] != month
-                            ):
+                            if next_idx >= len(df):
                                 is_payday = True
+                            else:
+                                next_period = (
+                                    df.iloc[next_idx]["Year"]
+                                    if self.request.dca_interval
+                                    == InvestmentInterval.YEARLY
+                                    else df.iloc[next_idx]["Month"]
+                                )
+                                if next_period != period:
+                                    is_payday = True
 
                     if is_payday:
                         dca_amount = self.request.dca_amount
                         cash += dca_amount
                         self.total_invested += dca_amount
-                        seen_months.add(month)
+                        seen_periods.add(period)
                         print(
-                            f"DEBUG: Payday! Month={month}, Added={dca_amount}, Total Invested={self.total_invested}"
+                            f"DEBUG: Payday! Period={period}, Added={dca_amount}, Total Invested={self.total_invested}"
                         )
 
             # === 策略執行邏輯 ===
@@ -709,6 +823,10 @@ class BacktestEngine:
 
 def run_full_backtest(request: BacktestRequest, backtest_id: int) -> BacktestResult:
     """執行完整回測流程"""
+    # 檢查是否為多股票DCA
+    if request.strategy_type == StrategyType.DCA and request.stock_allocations:
+        return run_multi_stock_dca(request, backtest_id)
+
     engine = BacktestEngine(request)
 
     # 1. 取得數據
@@ -748,5 +866,255 @@ def run_full_backtest(request: BacktestRequest, backtest_id: int) -> BacktestRes
             "rsi_period": request.rsi_period,
             "rsi_buy": request.rsi_buy,
             "rsi_sell": request.rsi_sell,
+        },
+    )
+
+
+def run_multi_stock_dca(request: BacktestRequest, backtest_id: int) -> BacktestResult:
+    """執行多股票DCA回測"""
+    if not request.stock_allocations:
+        raise ValueError("多股票DCA需要提供stock_allocations")
+
+    # 為每個股票創建引擎並取得數據
+    stock_engines = {}
+    stock_data = {}
+
+    for allocation in request.stock_allocations:
+        symbol = allocation.stock_symbol
+        # 創建該股票的請求
+        stock_request = BacktestRequest(
+            strategy_name=f"{request.strategy_name}_{symbol}",
+            stock_symbol=symbol,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            initial_capital=0,
+            strategy_type=StrategyType.DCA,
+            dca_amount=request.dca_amount * allocation.allocation_ratio,
+            dca_day=request.dca_day,
+            dca_month=request.dca_month,
+            dca_interval=request.dca_interval,
+        )
+
+        engine = BacktestEngine(stock_request)
+        engine.fetch_data()
+        engine.calculate_indicators()
+        engine.generate_signals()
+
+        stock_engines[symbol] = engine
+        stock_data[symbol] = {
+            "df": engine.df,
+            "ratio": allocation.allocation_ratio,
+            "shares": 0,
+            "total_cost": 0.0,
+        }
+
+    # 執行多股票DCA回測
+    cash = request.initial_capital
+    total_invested = cash
+    all_trades = []
+    equity_curve = []
+    seen_periods = set()
+
+    # 獲取所有日期（使用第一個股票的日期）
+    first_symbol = request.stock_allocations[0].stock_symbol
+    dates = stock_engines[first_symbol].df
+
+    for idx, row in dates.iterrows():
+        date = row["Date"]
+        signal = row.get("Signal", 0)
+
+        # 如果是DCA買入日
+        if signal == 1:
+            # 注入資金
+            cash += request.dca_amount
+            total_invested += request.dca_amount
+
+            # 按比例買入各股票
+            for allocation in request.stock_allocations:
+                symbol = allocation.stock_symbol
+                ratio = allocation.allocation_ratio
+                amount = request.dca_amount * ratio
+
+                # 找到該股票在這天的價格
+                engine = stock_engines[symbol]
+                stock_row = engine.df[engine.df["Date"] == date]
+
+                if not stock_row.empty:
+                    price = stock_row.iloc[0]["Close"]
+                    buy_shares = int(amount // price)
+
+                    if buy_shares > 0:
+                        cost = buy_shares * price
+                        cash -= cost
+
+                        stock_data[symbol]["shares"] += buy_shares
+                        stock_data[symbol]["total_cost"] += cost
+
+                        # 計算當前該股票的未實現報酬
+                        current_value = stock_data[symbol]["shares"] * price
+                        unrealized_pnl_pct = (
+                            (
+                                (current_value - stock_data[symbol]["total_cost"])
+                                / stock_data[symbol]["total_cost"]
+                                * 100
+                            )
+                            if stock_data[symbol]["total_cost"] > 0
+                            else 0
+                        )
+
+                        all_trades.append(
+                            TradeRecord(
+                                date=date,
+                                action="BUY",
+                                price=round(price, 2),
+                                shares=buy_shares,
+                                value=round(cost, 2),
+                                balance=round(cash, 2),
+                                total_assets=round(
+                                    cash
+                                    + sum(
+                                        stock_data[s]["shares"]
+                                        * stock_engines[s]
+                                        .df[stock_engines[s].df["Date"] == date]
+                                        .iloc[0]["Close"]
+                                        for s in stock_data.keys()
+                                        if not stock_engines[s]
+                                        .df[stock_engines[s].df["Date"] == date]
+                                        .empty
+                                    ),
+                                    2,
+                                ),
+                                pnl=round(unrealized_pnl_pct, 2),
+                                stock_symbol=symbol,
+                            )
+                        )
+
+        # 計算當日總資產
+        total_stock_value = 0
+        for symbol, data in stock_data.items():
+            engine = stock_engines[symbol]
+            stock_row = engine.df[engine.df["Date"] == date]
+            if not stock_row.empty:
+                price = stock_row.iloc[0]["Close"]
+                total_stock_value += data["shares"] * price
+
+        equity_curve.append(round(cash + total_stock_value, 2))
+
+    # 計算績效
+    final_equity = equity_curve[-1] if equity_curve else 0
+    total_return = (
+        ((final_equity - total_invested) / total_invested * 100)
+        if total_invested > 0
+        else 0
+    )
+
+    # 完整的績效計算
+    # 1. 年化報酬率
+    days = len(equity_curve)
+    years = days / 252  # 假設252個交易日
+    if years > 0 and total_invested > 0:
+        ratio = final_equity / total_invested
+        if ratio > 0:
+            annualized_return = (ratio ** (1 / years) - 1) * 100
+        else:
+            annualized_return = -100
+    else:
+        annualized_return = 0
+
+    # 2. 夏普比率
+    equity_series = pd.Series(equity_curve)
+    daily_returns = equity_series.pct_change().dropna()
+    risk_free = 0.02 / 252  # 假設無風險利率 2%
+    excess_returns = daily_returns - risk_free
+    std_dev = excess_returns.std()
+    if std_dev > 0 and not np.isnan(std_dev):
+        sharpe_ratio = (excess_returns.mean() / std_dev) * np.sqrt(252)
+    else:
+        sharpe_ratio = 0
+
+    # 3. 最大回撤
+    cummax = equity_series.cummax()
+    cummax = cummax.replace(0, 1)  # 避免除以零
+    drawdown = (equity_series - cummax) / cummax
+    max_drawdown = drawdown.min() * 100
+
+    # 4. 交易統計 (DCA策略)
+    buy_trades = [t for t in all_trades if t.action == "BUY"]
+    profit_trades_list = [t for t in buy_trades if t.pnl and t.pnl > 0]
+    loss_trades_list = [t for t in buy_trades if t.pnl and t.pnl <= 0]
+
+    total_trades = len(buy_trades)
+    win_rate = (len(profit_trades_list) / total_trades * 100) if total_trades > 0 else 0
+    avg_profit = (
+        np.mean([t.pnl for t in profit_trades_list]) if profit_trades_list else 0
+    )
+    avg_loss = np.mean([t.pnl for t in loss_trades_list]) if loss_trades_list else 0
+
+    # 清理 NaN 和 Inf 值
+    def clean_float(val):
+        if val is None:
+            return 0.0
+        if np.isnan(val) or np.isinf(val):
+            return 0.0
+        return float(val)
+
+    summary = BacktestSummary(
+        total_return=round(clean_float(total_return), 2),
+        annualized_return=round(clean_float(annualized_return), 2),
+        sharpe_ratio=round(clean_float(sharpe_ratio), 2),
+        max_drawdown=round(clean_float(max_drawdown), 2),
+        win_rate=round(clean_float(win_rate), 2),
+        total_trades=total_trades,
+        profit_trades=len(profit_trades_list),
+        loss_trades=len(loss_trades_list),
+        avg_profit=round(clean_float(avg_profit), 2),
+        avg_loss=round(clean_float(avg_loss), 2),
+        total_cost=total_invested,
+    )
+
+    # 返回結果（构建多股票价格数据）
+    first_engine = stock_engines[first_symbol]
+
+    # 构建多股票价格数据
+    multi_stock_prices = {}
+    for symbol in stock_engines.keys():
+        engine = stock_engines[symbol]
+        prices = [
+            round(float(p), 2) if not pd.isna(p) and not np.isinf(p) else 0.0
+            for p in engine.df["Close"].tolist()
+        ]
+        multi_stock_prices[symbol] = prices
+
+    price_data = PriceData(
+        dates=first_engine.df["Date"].tolist(),
+        prices=[],  # 多股票时不使用单一价格列
+        ma_short=[None] * len(first_engine.df),
+        ma_long=[None] * len(first_engine.df),
+        multi_stock_prices=multi_stock_prices,
+    )
+
+    return BacktestResult(
+        id=backtest_id,
+        strategy_name=request.strategy_name,
+        stock_symbol="MULTI_STOCK_DCA",
+        strategy_type=request.strategy_type.value,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        initial_capital=request.initial_capital,
+        final_capital=final_equity,
+        created_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        summary=summary,
+        price_data=price_data,
+        equity_data=EquityData(
+            dates=first_engine.df["Date"].tolist(), equity=equity_curve
+        ),
+        trades=all_trades,
+        params={
+            "strategy_type": request.strategy_type.value,
+            "dca_interval": request.dca_interval.value,
+            "stock_allocations": [
+                {"stock_symbol": a.stock_symbol, "allocation_ratio": a.allocation_ratio}
+                for a in request.stock_allocations
+            ],
         },
     )

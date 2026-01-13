@@ -2,7 +2,7 @@
 Pydantic models for backtest API
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from enum import Enum
@@ -15,6 +15,25 @@ class StrategyType(str, Enum):
     BOLLINGER = "BOLLINGER"
     DCA = "DCA"  # 定期定額
     SMA_BREAKOUT = "SMA_BREAKOUT"  # SMA 突破策略
+
+
+class InvestmentInterval(str, Enum):
+    MONTHLY = "MONTHLY"  # 每月投入
+    YEARLY = "YEARLY"  # 每年投入
+
+
+class StockAllocation(BaseModel):
+    """股票配置（用於多股票DCA）"""
+
+    stock_symbol: str
+    allocation_ratio: float = Field(ge=0, le=1)  # 分配比例 0-1
+
+    @field_validator("allocation_ratio")
+    @classmethod
+    def validate_ratio(cls, v):
+        if v < 0 or v > 1:
+            raise ValueError("allocation_ratio must be between 0 and 1")
+        return v
 
 
 class BacktestRequest(BaseModel):
@@ -47,7 +66,23 @@ class BacktestRequest(BaseModel):
 
     # DCA 定期定額參數
     dca_amount: float = 10000  # 每次投入金額
-    dca_day: int = 1  # 每月第幾天買入 (1-28)
+    dca_day: int = 1  # 每月第幾天買入 (1-31)
+    dca_month: int = 1  # 每年第幾月買入 (1-12)，僅用於年度投入
+    dca_interval: InvestmentInterval = InvestmentInterval.MONTHLY  # 投入週期
+
+    # 多股票 DCA 參數
+    stock_allocations: Optional[List[StockAllocation]] = None  # 多股票配置
+
+    @field_validator("stock_allocations")
+    @classmethod
+    def validate_allocations(cls, v):
+        if v is not None and len(v) > 0:
+            total_ratio = sum(item.allocation_ratio for item in v)
+            if abs(total_ratio - 1.0) > 0.001:  # 允許小誤差
+                raise ValueError(
+                    f"Stock allocation ratios must sum to 1.0, got {total_ratio}"
+                )
+        return v
 
     # 進階交易設定
     sell_ratio: float = 1.0  # 賣出比例 (0.1 ~ 1.0)，預設 1.0 (全賣)
@@ -70,6 +105,7 @@ class TradeRecord(BaseModel):
     total_assets: float  # 總資產
     pnl: Optional[float] = None  # 對於 DCA：未實現報酬率(%)；對於其他策略：實現損益金額
     pnl_amount: Optional[float] = None  # 未實現損益金額（僅供參考）
+    stock_symbol: Optional[str] = None  # 股票代碼（多股票DCA時使用）
 
 
 class BacktestSummary(BaseModel):
@@ -92,9 +128,13 @@ class PriceData(BaseModel):
     """價格資料"""
 
     dates: List[str]
-    prices: List[float]
+    prices: List[float]  # 单股票时使用
     ma_short: List[Optional[float]]
     ma_long: List[Optional[float]]
+    # 多股票DCA时使用
+    multi_stock_prices: Optional[Dict[str, List[float]]] = (
+        None  # {stock_symbol: [prices]}
+    )
 
 
 class EquityData(BaseModel):
