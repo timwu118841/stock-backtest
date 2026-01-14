@@ -34,7 +34,10 @@ def decode_access_token(token: str) -> Optional[dict]:
         return None
 
 
-def get_token_from_cookie(request: Request) -> Optional[str]:
+def get_token_from_request(request: Request) -> Optional[str]:
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header[7:]
     return request.cookies.get("access_token")
 
 
@@ -42,7 +45,7 @@ async def get_current_user(
     request: Request,
     db: Session = Depends(get_db),
 ) -> User:
-    token = get_token_from_cookie(request)
+    token = get_token_from_request(request)
 
     if not token:
         raise HTTPException(
@@ -81,7 +84,7 @@ async def get_current_user_optional(
     request: Request,
     db: Session = Depends(get_db),
 ) -> Optional[User]:
-    token = get_token_from_cookie(request)
+    token = get_token_from_request(request)
     if not token:
         return None
 

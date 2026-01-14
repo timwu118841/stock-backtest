@@ -17,9 +17,7 @@ onMounted(() => {
   const token = route.query.token
   
   if (token) {
-    const isProduction = window.location.protocol === 'https:'
-    const secureFlag = isProduction ? '; secure' : ''
-    document.cookie = `access_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax${secureFlag}`
+    localStorage.setItem('access_token', token)
     router.replace('/')
   } else {
     router.replace('/login')
