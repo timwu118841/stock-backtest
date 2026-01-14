@@ -3,6 +3,12 @@
 這份文件是 **Stock Backtesting App 後端** 的開發指南。
 當你需要修改、擴充或維護後端代碼時，請嚴格遵守以下架構與規範。
 
+## 0. Git 操作規範 (重要!)
+
+- **不要自動 commit 和 push**
+- 完成修改後，等待用戶確認再進行 git 操作
+- 只有在用戶明確要求時才執行 commit/push
+
 ## 1. 技術棧 (Tech Stack)
 
 - **核心框架**: FastAPI (Python 3.10+)

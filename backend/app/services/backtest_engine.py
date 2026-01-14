@@ -23,6 +23,14 @@ from app.models.backtest import (
 )
 
 
+def _clean_float(val) -> float:
+    if val is None:
+        return 0.0
+    if np.isnan(val) or np.isinf(val):
+        return 0.0
+    return float(val)
+
+
 class BacktestEngine:
     """回測引擎核心類別"""
 
@@ -32,6 +40,8 @@ class BacktestEngine:
         self.trades: List[TradeRecord] = []
         self.equity_curve: List[float] = []
         self.total_invested: float = 0.0  # 總投入本金 (初始 + 追加)
+        self.total_cost: float = 0.0  # 實際買入成本
+        self.final_stock_value: float = 0.0
 
     def fetch_data(self) -> pd.DataFrame:
         """從 yfinance 取得股票數據"""
@@ -545,16 +555,15 @@ class BacktestEngine:
         if strategy == StrategyType.DCA:
             # DCA 策略：添加期末結算記錄，顯示最終報酬率
             if shares > 0:
-                # 計算總投入金額（排除 HOLD 記錄）
-                buy_trades = [t for t in trades if t.action == "BUY"]
-                total_invested = sum(t.value for t in buy_trades)
-
                 final_value = shares * last_price
                 final_equity = cash + final_value
+                self.final_stock_value = final_value
 
-                if total_invested > 0:
-                    final_pnl_amount = final_equity - total_invested
-                    final_pnl_pct = (final_pnl_amount / total_invested) * 100
+                if total_cost > 0:
+                    final_pnl_amount = (
+                        final_value - total_cost
+                    )  # 持股市值 - 實際買入成本
+                    final_pnl_pct = (final_pnl_amount / total_cost) * 100
                 else:
                     final_pnl_amount = 0
                     final_pnl_pct = 0
@@ -612,6 +621,7 @@ class BacktestEngine:
 
         self.trades = trades
         self.equity_curve = equity_curve
+        self.total_cost = total_cost
         return trades, equity_curve
 
     def calculate_metrics(self) -> BacktestSummary:
@@ -623,25 +633,24 @@ class BacktestEngine:
             initial = self.request.initial_capital
             final = self.equity_curve[-1]
 
-            # 對於 DCA 策略，計算方式不同
+            # 對於 DCA 策略，使用實際買入成本計算報酬率
             if self.request.strategy_type == StrategyType.DCA:
-                # 使用已追蹤的總投入金額（包含 initial_capital + 所有 DCA 注入）
-                total_invested = self.total_invested
-                if total_invested > 0:
-                    total_return = ((final - total_invested) / total_invested) * 100
+                cost = self.total_cost
+                stock_value = self.final_stock_value
+                if cost > 0:
+                    total_return = ((stock_value - cost) / cost) * 100
                 else:
                     total_return = 0
 
                 # 年化報酬率
                 days = len(self.equity_curve)
                 years = days / 252
-                if years > 0 and total_invested > 0:
-                    # 避免負數底數的冪運算導致複數或錯誤
-                    ratio = final / total_invested
+                if years > 0 and cost > 0:
+                    ratio = stock_value / cost
                     if ratio > 0:
                         annualized_return = (ratio ** (1 / years) - 1) * 100
                     else:
-                        annualized_return = -100  # 全虧
+                        annualized_return = -100
                 else:
                     annualized_return = 0
             else:
@@ -765,26 +774,18 @@ class BacktestEngine:
                 else:
                     total_cost = self.request.initial_capital
 
-            # 輔助函數：處理 NaN 和 Inf
-            def clean_float(val):
-                if val is None:
-                    return 0.0
-                if np.isnan(val) or np.isinf(val):
-                    return 0.0
-                return float(val)
-
             return BacktestSummary(
-                total_return=round(clean_float(total_return), 2),
-                annualized_return=round(clean_float(annualized_return), 2),
-                sharpe_ratio=round(clean_float(sharpe_ratio), 2),
-                max_drawdown=round(clean_float(max_drawdown), 2),
-                win_rate=round(clean_float(win_rate), 2),
+                total_return=round(_clean_float(total_return), 2),
+                annualized_return=round(_clean_float(annualized_return), 2),
+                sharpe_ratio=round(_clean_float(sharpe_ratio), 2),
+                max_drawdown=round(_clean_float(max_drawdown), 2),
+                win_rate=round(_clean_float(win_rate), 2),
                 total_trades=total_trades,
                 profit_trades=profit_trades_count,
                 loss_trades=loss_trades_count,
-                avg_profit=round(clean_float(avg_profit), 2),
-                avg_loss=round(clean_float(avg_loss), 2),
-                total_cost=round(clean_float(total_cost), 2),
+                avg_profit=round(_clean_float(avg_profit), 2),
+                avg_loss=round(_clean_float(avg_loss), 2),
+                total_cost=round(_clean_float(total_cost), 2),
             )
         except Exception as e:
             # 發生錯誤時回傳預設值，避免 API 崩潰
@@ -1074,25 +1075,17 @@ def run_multi_stock_dca(request: BacktestRequest, backtest_id: int) -> BacktestR
     )
     avg_loss = np.mean([t.pnl for t in loss_trades_list]) if loss_trades_list else 0
 
-    # 清理 NaN 和 Inf 值
-    def clean_float(val):
-        if val is None:
-            return 0.0
-        if np.isnan(val) or np.isinf(val):
-            return 0.0
-        return float(val)
-
     summary = BacktestSummary(
-        total_return=round(clean_float(total_return), 2),
-        annualized_return=round(clean_float(annualized_return), 2),
-        sharpe_ratio=round(clean_float(sharpe_ratio), 2),
-        max_drawdown=round(clean_float(max_drawdown), 2),
-        win_rate=round(clean_float(win_rate), 2),
+        total_return=round(_clean_float(total_return), 2),
+        annualized_return=round(_clean_float(annualized_return), 2),
+        sharpe_ratio=round(_clean_float(sharpe_ratio), 2),
+        max_drawdown=round(_clean_float(max_drawdown), 2),
+        win_rate=round(_clean_float(win_rate), 2),
         total_trades=total_trades,
         profit_trades=len(profit_trades_list),
         loss_trades=len(loss_trades_list),
-        avg_profit=round(clean_float(avg_profit), 2),
-        avg_loss=round(clean_float(avg_loss), 2),
+        avg_profit=round(_clean_float(avg_profit), 2),
+        avg_loss=round(_clean_float(avg_loss), 2),
         total_cost=total_invested,
     )
 
@@ -1142,148 +1135,6 @@ def run_multi_stock_dca(request: BacktestRequest, backtest_id: int) -> BacktestR
             ],
         },
     )
-
-
-def optimize_dca_allocation(request: OptimizeRequest) -> OptimizeResult:
-    """
-    Optimizes asset allocation for DCA strategy using Monte Carlo Simulation.
-
-    Algorithm:
-    1. Fetches historical data for all requested stocks.
-    2. Aligns data to a common timeline.
-    3. Runs 1000 simulations with random weight distributions.
-    4. For each simulation, reconstructs the daily equity curve to calculate Sharpe Ratio.
-    5. Returns the allocation with the highest Sharpe Ratio.
-    """
-    if not request.stocks or len(request.stocks) < 2:
-        raise ValueError("Allocation optimization requires at least 2 stocks")
-
-    stock_dfs = {}
-    dates = None
-    common_dates = None
-
-    try:
-        for symbol in request.stocks:
-            temp_req = BacktestRequest(
-                strategy_name="temp",
-                stock_symbol=symbol,
-                start_date=request.start_date,
-                end_date=request.end_date,
-                strategy_type=StrategyType.DCA,
-                dca_day=request.dca_day or 1,
-                dca_month=request.dca_month or 1,
-            )
-            engine = BacktestEngine(temp_req)
-            df = engine.fetch_data()
-
-            clean_df = df[["Date", "Close"]].copy()
-            clean_df["Date"] = pd.to_datetime(clean_df["Date"])
-            clean_df.set_index("Date", inplace=True)
-
-            if common_dates is None:
-                common_dates = clean_df.index
-            else:
-                common_dates = common_dates.intersection(clean_df.index)
-
-            stock_dfs[symbol] = clean_df
-
-        if len(common_dates) == 0:
-            raise ValueError("No overlapping dates found for the selected stocks")
-
-        aligned_prices = {}
-        for symbol in request.stocks:
-            aligned_prices[symbol] = stock_dfs[symbol].loc[common_dates]["Close"].values
-
-        dca_indices = []
-        dates_list = common_dates.tolist()
-
-        last_period = -1
-        for i, date in enumerate(dates_list):
-            current_period = (
-                date.month
-                if request.dca_interval == InvestmentInterval.MONTHLY
-                else date.year
-            )
-
-            if current_period != last_period:
-                dca_indices.append(i)
-                last_period = current_period
-
-        num_simulations = 1000
-        best_sharpe = -float("inf")
-        best_return = -float("inf")
-        best_allocation = {}
-
-        price_matrix = np.array([aligned_prices[s] for s in request.stocks]).T
-        n_days = price_matrix.shape[0]
-        n_stocks = len(request.stocks)
-
-        for _ in range(num_simulations):
-            weights = np.random.random(n_stocks)
-            weights /= weights.sum()
-
-            dca_amount = request.dca_amount
-            total_invested = 0
-
-            shares = np.zeros(n_stocks)
-            equity_curve = np.zeros(n_days)
-            current_shares_dynamic = np.zeros(n_stocks)
-
-            last_idx = 0
-            for d_idx in dca_indices:
-                if d_idx > last_idx:
-                    period_values = np.dot(
-                        price_matrix[last_idx:d_idx], current_shares_dynamic
-                    )
-                    equity_curve[last_idx:d_idx] = period_values + (
-                        total_invested - dca_amount if total_invested > 0 else 0
-                    )
-
-                current_prices = price_matrix[d_idx]
-                money_alloc = dca_amount * weights
-                new_shares = np.floor(money_alloc / current_prices)
-                current_shares_dynamic += new_shares
-                total_invested += dca_amount
-
-                last_idx = d_idx
-
-            if last_idx < n_days:
-                period_values = np.dot(price_matrix[last_idx:], current_shares_dynamic)
-                equity_curve[last_idx:] = period_values
-
-            final_equity = equity_curve[-1] if equity_curve[-1] > 0 else 0
-            total_return_pct = (
-                (final_equity - total_invested) / total_invested * 100
-                if total_invested > 0
-                else 0
-            )
-
-            equity_series = pd.Series(equity_curve)
-            equity_series = equity_series[equity_series > 0]
-
-            sharpe = 0
-            if len(equity_series) > 10:
-                pct_change = equity_series.pct_change().dropna()
-                std = pct_change.std()
-                if std > 0:
-                    sharpe = (pct_change.mean() / std) * np.sqrt(252)
-
-            if sharpe > best_sharpe:
-                best_sharpe = sharpe
-                best_return = total_return_pct
-                best_allocation = {
-                    symbol: float(w) for symbol, w in zip(request.stocks, weights)
-                }
-
-        return OptimizeResult(
-            best_return=round(best_return, 2),
-            best_sharpe=round(best_sharpe, 2),
-            best_allocation={k: round(v, 4) for k, v in best_allocation.items()},
-            heatmap_data=[],
-        )
-
-    except Exception as e:
-        raise ValueError(f"Optimization failed: {str(e)}")
 
 
 def optimize_dca_allocation(request: OptimizeRequest) -> OptimizeResult:
