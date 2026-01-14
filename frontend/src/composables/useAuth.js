@@ -35,6 +35,7 @@ export function useAuth() {
       console.error('Logout error:', error)
     } finally {
       user.value = null
+      localStorage.removeItem('access_token')
     }
   }
 
