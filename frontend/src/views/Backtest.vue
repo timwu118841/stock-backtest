@@ -428,7 +428,7 @@ const exportTradesCsv = () => {
           <el-row v-if="!(backtestForm.strategyType === 'DCA' && backtestForm.useMultiStock)" :gutter="24">
             <el-col :xs="24" :sm="12">
               <el-form-item label="股票代碼" required>
-                <el-select v-model="backtestForm.stockSymbol" placeholder="選擇股票" filterable allow-create style="width: 100%">
+                <el-select v-model="backtestForm.stockSymbol" placeholder="選擇股票(或輸入股票代碼)" filterable allow-create style="width: 100%">
                   <el-option v-for="item in stockOptions" :key="item.value" :label="item.label" :value="item.value" />
                 </el-select>
               </el-form-item>

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>策略比較 API 測試工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #409EFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #66b1ff; }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f0f9ff;
+            border-left: 4px solid #409EFF;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .error { background: #fef0f0; border-left-color: #f56c6c; }
+        .success { background: #f0f9ff; border-left-color: #67c23a; }
+        .warning { background: #fdf6ec; border-left-color: #e6a23c; }
+        h2 { color: #303133; }
+        input, select {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #dcdfe6;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 策略比較 API 診斷工具</h1>
+    
+    <div class="test-section">
+        <h2>步驟 1: 測試後端連接</h2>
+        <p>檢查後端 API 是否正常運作</p>
+        <label>
+            後端 URL:
+            <input type="text" id="apiUrl" value="http://localhost:8000/api" style="width: 300px;">
+        </label>
+        <br>
+        <button onclick="testHealth()">測試健康檢查</button>
+        <div id="healthResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>步驟 2: 檢查歷史記錄</h2>
+        <p>查看是否有可用的回測記錄</p>
+        <button onclick="testGetHistory()">獲取歷史記錄</button>
+        <div id="historyResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>步驟 3: 執行測試回測</h2>
+        <p>創建一個測試回測記錄</p>
+        <button onclick="runTestBacktest()">執行測試回測 (AAPL)</button>
+        <div id="backtestResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>步驟 4: 測試策略比較</h2>
+        <p>測試比較 API 是否正常</p>
+        <label>
+            策略 ID (逗號分隔):
+            <input type="text" id="strategyIds" placeholder="例如: 1,2" style="width: 200px;">
+        </label>
+        <button onclick="testCompare()">執行比較</button>
+        <div id="compareResult"></div>
+    </div>
+
+    <script>
+        function getApiUrl() {
+            return document.getElementById('apiUrl').value;
+        }
+
+        async function testHealth() {
+            const resultDiv = document.getElementById('healthResult');
+            resultDiv.innerHTML = '<div class="result">測試中...</div>';
+            
+            try {
+                const response = await fetch(`${getApiUrl()}/health`);
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        ✅ 後端連接成功！
+                        
+狀態: ${data.status}
+時間: ${data.timestamp}
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        ❌ 連接失敗！
+                        
+錯誤: ${error.message}
+                        
+請檢查:
+1. 後端是否正在運行
+2. URL 是否正確
+3. CORS 設定是否正確
+                    </div>
+                `;
+            }
+        }
+
+        async function testGetHistory() {
+            const resultDiv = document.getElementById('historyResult');
+            resultDiv.innerHTML = '<div class="result">獲取中...</div>';
+            
+            try {
+                const response = await fetch(`${getApiUrl()}/backtest/history`);
+                const data = await response.json();
+                
+                if (data.length === 0) {
+                    resultDiv.innerHTML = `
+                        <div class="result warning">
+                            ⚠️ 沒有歷史記錄！
+                            
+原因: 後端記憶體中沒有回測數據
+                            
+可能原因:
+1. 還沒執行過任何回測
+2. 後端重新啟動過（記憶體被清空）
+3. Render 服務休眠後喚醒（數據丟失）
+                            
+解決方案: 執行「步驟 3」創建測試數據
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            ✅ 找到 ${data.length} 筆歷史記錄！
+                            
+${JSON.stringify(data, null, 2)}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        ❌ 獲取失敗！
+                        
+錯誤: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        async function runTestBacktest() {
+            const resultDiv = document.getElementById('backtestResult');
+            resultDiv.innerHTML = '<div class="result">執行中... (需要 10-15 秒)</div>';
+            
+            const testData = {
+                strategy_name: "測試策略-AAPL",
+                stock_symbol: "AAPL",
+                start_date: "2023-01-01",
+                end_date: "2023-12-31",
+                initial_capital: 1000000,
+                strategy_type: "MA_CROSS",
+                short_period: 5,
+                long_period: 20
+            };
+            
+            try {
+                const response = await fetch(`${getApiUrl()}/backtest/run`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testData)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                }
+                
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        ✅ 測試回測執行成功！
+                        
+ID: ${data.id}
+策略: ${data.strategy_name}
+總報酬: ${data.summary.total_return}%
+                        
+現在可以執行「步驟 2」查看歷史記錄了！
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        ❌ 執行失敗！
+                        
+錯誤: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        async function testCompare() {
+            const resultDiv = document.getElementById('compareResult');
+            const idsInput = document.getElementById('strategyIds').value;
+            
+            if (!idsInput) {
+                resultDiv.innerHTML = `
+                    <div class="result warning">
+                        ⚠️ 請輸入策略 ID
+                    </div>
+                `;
+                return;
+            }
+            
+            const ids = idsInput.split(',').map(id => parseInt(id.trim()));
+            
+            if (ids.length < 2) {
+                resultDiv.innerHTML = `
+                    <div class="result warning">
+                        ⚠️ 至少需要兩個策略 ID
+                    </div>
+                `;
+                return;
+            }
+            
+            resultDiv.innerHTML = '<div class="result">比較中...</div>';
+            
+            try {
+                const response = await fetch(`${getApiUrl()}/strategy/compare`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: ids })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || `HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        ✅ 比較成功！
+                        
+比較了 ${data.metrics.length} 個策略
+                        
+績效指標:
+${JSON.stringify(data.metrics, null, 2)}
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        ❌ 比較失敗！
+                        
+錯誤: ${error.message}
+                        
+可能原因:
+1. 指定的 ID 不存在
+2. 後端記憶體中的數據已清空
+3. ID 格式錯誤
+                    </div>
+                `;
+            }
+        }
+
+        window.onload = () => {
+            const currentUrl = window.location.origin;
+            if (currentUrl.includes('vercel.app') || currentUrl.includes('onrender.com')) {
+                document.getElementById('apiUrl').value = 'https://stock-backtest-api.onrender.com/api';
+            }
+        };
+    </script>
+</body>
+</html>

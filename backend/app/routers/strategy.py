@@ -1,11 +1,9 @@
-"""
-策略比較與參數最佳化 API
-"""
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
 
-from fastapi import APIRouter, HTTPException
-from typing import List
-import numpy as np
-
+from app.core.database import get_db
+from app.core.models import User, BacktestRecord
+from app.core.security import get_current_user
 from app.models.backtest import (
     OptimizeRequest,
     OptimizeResult,
@@ -14,67 +12,69 @@ from app.models.backtest import (
     StrategyType,
 )
 from app.services.backtest_engine import BacktestEngine, optimize_dca_allocation
-from app.routers.backtest import backtest_results_db
 
 router = APIRouter(prefix="/api/strategy", tags=["Strategy"])
 
 
 @router.post("/compare")
-async def compare_strategies(request: CompareRequest):
-    """
-    比較多個回測策略的績效
-    """
+async def compare_strategies(
+    request: CompareRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     if len(request.ids) < 2:
         raise HTTPException(status_code=400, detail="至少需要選擇兩個策略進行比較")
 
-    # 從資料庫取得結果
-    results = []
-    for id in request.ids:
-        found = None
-        for r in backtest_results_db:
-            if r.id == id:
-                found = r
-                break
-        if not found:
-            raise HTTPException(status_code=404, detail=f"找不到 ID 為 {id} 的回測結果")
-        results.append(found)
+    records = (
+        db.query(BacktestRecord)
+        .filter(
+            BacktestRecord.id.in_(request.ids),
+            BacktestRecord.user_id == current_user.id,
+        )
+        .all()
+    )
 
-    # 組裝比較資料
+    if len(records) != len(request.ids):
+        found_ids = {r.id for r in records}
+        missing_ids = [id for id in request.ids if id not in found_ids]
+        raise HTTPException(
+            status_code=404,
+            detail=f"找不到以下 ID 的回測結果: {missing_ids}",
+        )
+
     metrics = []
     equity_curves = {"dates": [], "series": []}
 
-    for r in results:
+    for record in records:
         metrics.append(
             {
-                "id": r.id,
-                "name": r.strategy_name,
-                "totalReturn": r.summary.total_return,
-                "annualizedReturn": r.summary.annualized_return,
-                "sharpeRatio": r.summary.sharpe_ratio,
-                "maxDrawdown": r.summary.max_drawdown,
-                "winRate": r.summary.win_rate,
+                "id": record.id,
+                "name": record.strategy_name,
+                "totalReturn": record.total_return,
+                "annualizedReturn": record.annualized_return,
+                "sharpeRatio": record.sharpe_ratio,
+                "maxDrawdown": record.max_drawdown,
+                "winRate": record.win_rate,
             }
         )
 
+        equity_data = record.equity_data
         equity_curves["series"].append(
-            {"name": r.strategy_name, "data": r.equity_data.equity}
+            {"name": record.strategy_name, "data": equity_data.get("equity", [])}
         )
 
-    # 使用第一個結果的日期作為 X 軸
-    if results:
-        equity_curves["dates"] = results[0].equity_data.dates
+    if records:
+        first_equity_data = records[0].equity_data
+        equity_curves["dates"] = first_equity_data.get("dates", [])
 
     return {"metrics": metrics, "equityCurves": equity_curves}
 
 
 @router.post("/optimize", response_model=OptimizeResult)
-async def optimize_strategy(request: OptimizeRequest):
-    """
-    執行策略參數最佳化
-
-    - DCA: 執行資產配置最佳化 (Monte Carlo)
-    - 其他: 執行參數網格搜尋 (Grid Search)
-    """
+async def optimize_strategy(
+    request: OptimizeRequest,
+    current_user: User = Depends(get_current_user),
+):
     if request.strategy_type == StrategyType.DCA:
         try:
             return optimize_dca_allocation(request)
@@ -82,7 +82,6 @@ async def optimize_strategy(request: OptimizeRequest):
             raise HTTPException(status_code=400, detail=str(e))
 
     try:
-        # 建立參數網格
         param1_values = list(
             range(
                 request.param1_range[0],
@@ -104,15 +103,12 @@ async def optimize_strategy(request: OptimizeRequest):
         best_param1 = param1_values[0]
         best_param2 = param2_values[0]
 
-        # 網格搜尋
         for i, p1 in enumerate(param1_values):
             for j, p2 in enumerate(param2_values):
-                # 確保長週期大於短週期
                 if p2 <= p1:
                     heatmap_data.append([i, j, None])
                     continue
 
-                # 建立回測請求
                 bt_request = BacktestRequest(
                     strategy_name=f"Optimize_{p1}_{p2}",
                     stock_symbol=request.stock_symbol,
@@ -124,7 +120,6 @@ async def optimize_strategy(request: OptimizeRequest):
                 )
 
                 try:
-                    # 執行回測
                     engine = BacktestEngine(bt_request)
                     engine.fetch_data()
                     engine.calculate_indicators()
@@ -137,7 +132,6 @@ async def optimize_strategy(request: OptimizeRequest):
 
                     heatmap_data.append([i, j, round(total_return, 1)])
 
-                    # 更新最佳參數
                     if total_return > best_return:
                         best_return = total_return
                         best_sharpe = sharpe

@@ -2,8 +2,10 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTheme } from './composables/useTheme'
+import { useAuth } from './composables/useAuth'
 
 const { isDark, toggleTheme } = useTheme()
+const { user, isAuthenticated, logout } = useAuth()
 const route = useRoute()
 
 // 響應式狀態
@@ -49,10 +51,20 @@ const toggleSidebar = () => {
     isCollapse.value = !isCollapse.value
   }
 }
+
+const handleLogout = async () => {
+  await logout()
+  window.location.href = '/login'
+}
+
+const isLoginPage = computed(() => route.path === '/login')
 </script>
 
 <template>
-  <el-container class="app-wrapper">
+  <div v-if="isLoginPage" class="login-wrapper">
+    <router-view />
+  </div>
+  <el-container v-else class="app-wrapper">
     <!-- 桌面版側邊欄 -->
     <el-aside 
       v-if="!isMobile" 
@@ -125,6 +137,32 @@ const toggleSidebar = () => {
         </div>
         
         <div class="header-right">
+          <el-dropdown v-if="isAuthenticated && user" trigger="click" @command="handleLogout">
+            <div class="user-info">
+              <el-avatar 
+                v-if="user.picture" 
+                :src="user.picture" 
+                :size="32"
+              />
+              <el-avatar v-else :size="32">
+                {{ user.name?.charAt(0) || 'U' }}
+              </el-avatar>
+              <span class="user-name">{{ user.name }}</span>
+              <el-icon><ArrowDown /></el-icon>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item disabled>
+                  <el-icon><User /></el-icon>
+                  {{ user.email }}
+                </el-dropdown-item>
+                <el-dropdown-item divided command="logout">
+                  <el-icon><SwitchButton /></el-icon>
+                  登出
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-switch
             v-model="isDark"
             inline-prompt
@@ -305,5 +343,48 @@ html.dark .collapse-btn:hover {
   .page-title {
     font-size: 18px;
   }
+}
+
+/* User Info Styles */
+.login-wrapper {
+  min-height: 100vh;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  margin-right: 12px;
+}
+
+.user-info:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+html.dark .user-info:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.user-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  color: var(--app-text-color);
+}
+
+@media (max-width: 640px) {
+  .user-name {
+    display: none;
+  }
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
 }
 </style>

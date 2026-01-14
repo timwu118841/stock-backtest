@@ -1,47 +1,98 @@
-"""
-回測相關 API 端點
-"""
-
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List
-from datetime import datetime
+from sqlalchemy.orm import Session
 
+from app.core.database import get_db
+from app.core.models import User, BacktestRecord
+from app.core.security import get_current_user
 from app.models.backtest import (
     BacktestRequest,
     BacktestResult,
     BacktestHistoryItem,
-    OptimizeRequest,
-    OptimizeResult,
-    CompareRequest,
+    BacktestSummary,
+    PriceData,
+    EquityData,
+    TradeRecord,
 )
 from app.services.backtest_engine import run_full_backtest, BacktestEngine
 
 router = APIRouter(prefix="/api/backtest", tags=["Backtest"])
 
-# 模擬資料庫 - 存儲回測結果
-backtest_results_db: List[BacktestResult] = []
-next_backtest_id = 1
+
+def db_record_to_result(record: BacktestRecord) -> BacktestResult:
+    return BacktestResult(
+        id=record.id,
+        strategy_name=record.strategy_name,
+        stock_symbol=record.stock_symbol,
+        strategy_type=record.strategy_type,
+        start_date=record.start_date,
+        end_date=record.end_date,
+        initial_capital=record.initial_capital,
+        final_capital=record.final_capital,
+        created_at=record.created_at.isoformat() if record.created_at else "",
+        summary=BacktestSummary(
+            total_return=record.total_return,
+            annualized_return=record.annualized_return,
+            sharpe_ratio=record.sharpe_ratio,
+            max_drawdown=record.max_drawdown,
+            win_rate=record.win_rate,
+            total_trades=record.total_trades,
+            profit_trades=record.profit_trades,
+            loss_trades=record.loss_trades,
+            avg_profit=record.avg_profit,
+            avg_loss=record.avg_loss,
+            total_cost=record.total_cost,
+        ),
+        price_data=PriceData(**record.price_data),
+        equity_data=EquityData(**record.equity_data),
+        trades=[TradeRecord(**t) for t in record.trades],
+        params=record.params,
+    )
 
 
 @router.post("/run", response_model=BacktestResult)
-async def run_backtest(request: BacktestRequest):
-    """
-    執行策略回測
-
-    - 從 yfinance 取得股票歷史數據
-    - 根據策略類型計算技術指標
-    - 模擬交易並計算績效指標
-    """
-    global next_backtest_id
-
+async def run_backtest(
+    request: BacktestRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        result = run_full_backtest(request, next_backtest_id)
+        max_id = db.query(BacktestRecord.id).order_by(BacktestRecord.id.desc()).first()
+        next_id = (max_id[0] + 1) if max_id else 1
 
-        # 存入模擬資料庫
-        backtest_results_db.append(result)
-        next_backtest_id += 1
+        result = run_full_backtest(request, next_id)
 
-        return result
+        record = BacktestRecord(
+            user_id=current_user.id,
+            strategy_name=result.strategy_name,
+            stock_symbol=result.stock_symbol,
+            strategy_type=result.strategy_type,
+            start_date=result.start_date,
+            end_date=result.end_date,
+            initial_capital=result.initial_capital,
+            final_capital=result.final_capital,
+            total_return=result.summary.total_return,
+            annualized_return=result.summary.annualized_return,
+            sharpe_ratio=result.summary.sharpe_ratio,
+            max_drawdown=result.summary.max_drawdown,
+            win_rate=result.summary.win_rate,
+            total_trades=result.summary.total_trades,
+            profit_trades=result.summary.profit_trades,
+            loss_trades=result.summary.loss_trades,
+            avg_profit=result.summary.avg_profit,
+            avg_loss=result.summary.avg_loss,
+            total_cost=result.summary.total_cost or 0.0,
+            price_data=result.price_data.model_dump(),
+            equity_data=result.equity_data.model_dump(),
+            trades=[t.model_dump() for t in result.trades],
+            params=result.params,
+        )
+
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+
+        return db_record_to_result(record)
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -50,27 +101,34 @@ async def run_backtest(request: BacktestRequest):
 
 
 @router.get("/history", response_model=List[BacktestHistoryItem])
-async def get_history():
-    """取得所有回測歷史紀錄"""
-    history = []
+async def get_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    records = (
+        db.query(BacktestRecord)
+        .filter(BacktestRecord.user_id == current_user.id)
+        .order_by(BacktestRecord.created_at.desc())
+        .all()
+    )
 
-    for result in reversed(backtest_results_db):  # 最新的排前面
-        # 判斷狀態
-        if result.summary.total_return > 5:
+    history = []
+    for record in records:
+        if record.total_return > 5:
             status = "success"
-        elif result.summary.total_return >= 0:
+        elif record.total_return >= 0:
             status = "warning"
         else:
             status = "danger"
 
         history.append(
             BacktestHistoryItem(
-                id=result.id,
-                date=result.created_at,
-                strategy=result.strategy_name,
-                stock=result.stock_symbol,
-                return_pct=result.summary.total_return,
-                win_rate=result.summary.win_rate,
+                id=record.id,
+                date=record.created_at.isoformat() if record.created_at else "",
+                strategy=record.strategy_name,
+                stock=record.stock_symbol,
+                return_pct=record.total_return,
+                win_rate=record.win_rate,
                 status=status,
             )
         )
@@ -79,32 +137,53 @@ async def get_history():
 
 
 @router.get("/result/{backtest_id}", response_model=BacktestResult)
-async def get_backtest_result(backtest_id: int):
-    """取得單一回測詳細結果"""
-    for result in backtest_results_db:
-        if result.id == backtest_id:
-            return result
+async def get_backtest_result(
+    backtest_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    record = (
+        db.query(BacktestRecord)
+        .filter(
+            BacktestRecord.id == backtest_id, BacktestRecord.user_id == current_user.id
+        )
+        .first()
+    )
 
-    raise HTTPException(status_code=404, detail="找不到該回測紀錄")
+    if not record:
+        raise HTTPException(status_code=404, detail="找不到該回測紀錄")
+
+    return db_record_to_result(record)
 
 
 @router.delete("/history/{backtest_id}")
-async def delete_history(backtest_id: int):
-    """刪除回測紀錄"""
-    global backtest_results_db
+async def delete_history(
+    backtest_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    record = (
+        db.query(BacktestRecord)
+        .filter(
+            BacktestRecord.id == backtest_id, BacktestRecord.user_id == current_user.id
+        )
+        .first()
+    )
 
-    original_len = len(backtest_results_db)
-    backtest_results_db = [r for r in backtest_results_db if r.id != backtest_id]
-
-    if len(backtest_results_db) == original_len:
+    if not record:
         raise HTTPException(status_code=404, detail="找不到該回測紀錄")
+
+    db.delete(record)
+    db.commit()
 
     return {"message": "刪除成功", "id": backtest_id}
 
 
 @router.post("/debug")
-async def debug_backtest(request: BacktestRequest):
-    """調試端點：返回訊號統計信息"""
+async def debug_backtest(
+    request: BacktestRequest,
+    current_user: User = Depends(get_current_user),
+):
     try:
         engine = BacktestEngine(request)
         engine.fetch_data()
@@ -121,7 +200,6 @@ async def debug_backtest(request: BacktestRequest):
             "sample_signals": [],
         }
 
-        # 找出有訊號的日期
         signal_dates = df[df["Signal"] != 0][["Date", "Signal", "Close"]].head(20)
         if not signal_dates.empty:
             signal_stats["sample_signals"] = signal_dates.to_dict("records")

@@ -1,6 +1,19 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
 
 const routes = [
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('../views/Login.vue'),
+    meta: { title: '登入', public: true }
+  },
+  {
+    path: '/auth/callback',
+    name: 'AuthCallback',
+    component: () => import('../views/AuthCallback.vue'),
+    meta: { title: '登入中...', public: true }
+  },
   {
     path: '/',
     name: 'Dashboard',
@@ -38,9 +51,28 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from, next) => {
+let authChecked = false
+
+router.beforeEach(async (to, from, next) => {
   document.title = `${to.meta.title || '股票回測'} - Stock Backtester`
-  next()
+
+  if (to.meta.public) {
+    next()
+    return
+  }
+
+  const { isAuthenticated, checkAuth } = useAuth()
+
+  if (!authChecked) {
+    await checkAuth()
+    authChecked = true
+  }
+
+  if (!isAuthenticated.value) {
+    next({ name: 'Login', query: { redirect: to.fullPath } })
+  } else {
+    next()
+  }
 })
 
 export default router
