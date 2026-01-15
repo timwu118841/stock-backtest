@@ -367,43 +367,6 @@ class BacktestEngine:
                                 f"DEBUG: Payday! Period={period}, Added={dca_amount}, Total Invested={self.total_invested}"
                             )
 
-                # Debug print (只印第一天)
-                if idx == 0:
-                    print(
-                        f"DEBUG: DCA Amount={self.request.dca_amount}, Day={day}, Period={period}"
-                    )
-
-                if day is not None and period is not None:
-                    target_day = self.request.dca_day
-                    is_payday = False
-
-                    if period not in seen_periods:
-                        if day >= target_day:
-                            is_payday = True
-                        else:
-                            # 檢查是否為該週期最後一筆數據
-                            next_idx = idx + 1
-                            if next_idx >= len(df):
-                                is_payday = True
-                            else:
-                                next_period = (
-                                    df.iloc[next_idx]["Year"]
-                                    if self.request.dca_interval
-                                    == InvestmentInterval.YEARLY
-                                    else df.iloc[next_idx]["Month"]
-                                )
-                                if next_period != period:
-                                    is_payday = True
-
-                    if is_payday:
-                        dca_amount = self.request.dca_amount
-                        cash += dca_amount
-                        self.total_invested += dca_amount
-                        seen_periods.add(period)
-                        print(
-                            f"DEBUG: Payday! Period={period}, Added={dca_amount}, Total Invested={self.total_invested}"
-                        )
-
             # === 策略執行邏輯 ===
             if strategy == StrategyType.DCA:
                 # DCA 策略：每月自動補充資金買入，模擬真實定期定額
