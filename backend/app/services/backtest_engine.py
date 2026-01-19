@@ -849,13 +849,15 @@ def run_full_backtest(request: BacktestRequest, backtest_id: int) -> BacktestRes
 
 
 def run_multi_stock_dca(request: BacktestRequest, backtest_id: int) -> BacktestResult:
-    """執行多股票DCA回測"""
+    """執行多股票DCA回測 (效能優化版)"""
     if not request.stock_allocations:
         raise ValueError("多股票DCA需要提供stock_allocations")
 
     # 為每個股票創建引擎並取得數據
     stock_engines = {}
     stock_data = {}
+    # 效能優化：預先建立價格查詢字典 {date: price}，避免重複 DataFrame 過濾
+    price_lookup: Dict[str, Dict[str, float]] = {}  # {symbol: {date: price}}
 
     for allocation in request.stock_allocations:
         symbol = allocation.stock_symbol
@@ -885,19 +887,21 @@ def run_multi_stock_dca(request: BacktestRequest, backtest_id: int) -> BacktestR
             "shares": 0,
             "total_cost": 0.0,
         }
+        # 建立價格查詢字典 O(N) 預處理，後續查詢 O(1)
+        price_lookup[symbol] = dict(zip(engine.df["Date"], engine.df["Close"]))
 
     # 執行多股票DCA回測
     cash = request.initial_capital
     total_invested = cash
     all_trades = []
     equity_curve = []
-    seen_periods = set()
 
     # 獲取所有日期（使用第一個股票的日期）
     first_symbol = request.stock_allocations[0].stock_symbol
-    dates = stock_engines[first_symbol].df
+    dates_df = stock_engines[first_symbol].df
+    all_symbols = [a.stock_symbol for a in request.stock_allocations]
 
-    for idx, row in dates.iterrows():
+    for idx, row in dates_df.iterrows():
         date = row["Date"]
         signal = row.get("Signal", 0)
 
@@ -913,18 +917,11 @@ def run_multi_stock_dca(request: BacktestRequest, backtest_id: int) -> BacktestR
                 ratio = allocation.allocation_ratio
                 amount = request.dca_amount * ratio
 
-                # 找到該股票在這天的價格
-                engine = stock_engines[symbol]
-                stock_row = engine.df[engine.df["Date"] == date]
+                # 效能優化：使用預建的價格字典，O(1) 查詢
+                price = price_lookup[symbol].get(date, 0.0)
 
-                if not stock_row.empty:
-                    price = stock_row.iloc[0]["Close"]
-
-                    # 防止零價格導致除零錯誤
-                    if price > 0:
-                        buy_shares = int(amount // price)
-                    else:
-                        buy_shares = 0
+                if price > 0:
+                    buy_shares = int(amount // price)
 
                     if buy_shares > 0:
                         cost = buy_shares * price
@@ -945,6 +942,12 @@ def run_multi_stock_dca(request: BacktestRequest, backtest_id: int) -> BacktestR
                             else 0
                         )
 
+                        # 效能優化：計算 total_assets 使用價格字典
+                        total_assets_value = cash + sum(
+                            stock_data[s]["shares"] * price_lookup[s].get(date, 0.0)
+                            for s in all_symbols
+                        )
+
                         all_trades.append(
                             TradeRecord(
                                 date=date,
@@ -953,33 +956,17 @@ def run_multi_stock_dca(request: BacktestRequest, backtest_id: int) -> BacktestR
                                 shares=buy_shares,
                                 value=round(cost, 2),
                                 balance=round(cash, 2),
-                                total_assets=round(
-                                    cash
-                                    + sum(
-                                        stock_data[s]["shares"]
-                                        * stock_engines[s]
-                                        .df[stock_engines[s].df["Date"] == date]
-                                        .iloc[0]["Close"]
-                                        for s in stock_data.keys()
-                                        if not stock_engines[s]
-                                        .df[stock_engines[s].df["Date"] == date]
-                                        .empty
-                                    ),
-                                    2,
-                                ),
+                                total_assets=round(total_assets_value, 2),
                                 pnl=round(unrealized_pnl_pct, 2),
                                 stock_symbol=symbol,
                             )
                         )
 
-        # 計算當日總資產
-        total_stock_value = 0
-        for symbol, data in stock_data.items():
-            engine = stock_engines[symbol]
-            stock_row = engine.df[engine.df["Date"] == date]
-            if not stock_row.empty:
-                price = stock_row.iloc[0]["Close"]
-                total_stock_value += data["shares"] * price
+        # 效能優化：計算當日總資產使用價格字典，O(M) 而非 O(M*N)
+        total_stock_value = sum(
+            stock_data[s]["shares"] * price_lookup[s].get(date, 0.0)
+            for s in all_symbols
+        )
 
         equity_curve.append(round(cash + total_stock_value, 2))
 
