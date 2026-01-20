@@ -13,6 +13,9 @@ from app.models.backtest import (
     PriceData,
     EquityData,
     TradeRecord,
+    DashboardStats,
+    DashboardRecentItem,
+    DashboardResponse,
 )
 from app.services.backtest_engine import run_full_backtest, BacktestEngine
 
@@ -98,6 +101,69 @@ async def run_backtest(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"回測執行失敗: {str(e)}")
+
+
+@router.get("/dashboard", response_model=DashboardResponse)
+async def get_dashboard(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    records = (
+        db.query(BacktestRecord)
+        .filter(BacktestRecord.user_id == current_user.id)
+        .order_by(BacktestRecord.created_at.desc())
+        .all()
+    )
+
+    total_backtests = len(records)
+    profitable_backtests = sum(1 for r in records if r.total_return > 0)
+    avg_return = (
+        sum(r.total_return for r in records) / total_backtests
+        if total_backtests > 0
+        else 0
+    )
+
+    best_record = max(records, key=lambda r: r.total_return) if records else None
+
+    stats = DashboardStats(
+        total_backtests=total_backtests,
+        profitable_backtests=profitable_backtests,
+        avg_return=round(avg_return, 2),
+        best_strategy=best_record.strategy_type if best_record else None,
+        best_strategy_return=round(best_record.total_return, 2)
+        if best_record
+        else None,
+    )
+
+    recent_records = records[:5]
+    recent_backtests = []
+    for record in recent_records:
+        if record.total_return > 5:
+            status = "success"
+        elif record.total_return >= 0:
+            status = "warning"
+        else:
+            status = "danger"
+
+        return_str = (
+            f"+{record.total_return:.1f}%"
+            if record.total_return >= 0
+            else f"{record.total_return:.1f}%"
+        )
+        recent_backtests.append(
+            DashboardRecentItem(
+                id=record.id,
+                name=record.strategy_name,
+                stock=record.stock_symbol,
+                return_pct=return_str,
+                date=record.created_at.strftime("%Y-%m-%d")
+                if record.created_at
+                else "",
+                status=status,
+            )
+        )
+
+    return DashboardResponse(stats=stats, recent_backtests=recent_backtests)
 
 
 @router.get("/history", response_model=List[BacktestHistoryItem])

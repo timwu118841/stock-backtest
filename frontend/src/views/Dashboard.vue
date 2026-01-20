@@ -1,19 +1,59 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import api from '@/api'
 
+const loading = ref(true)
 const stats = ref([
-  { title: '總回測次數', value: '128', icon: 'Document', gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', iconBg: 'rgba(102, 126, 234, 0.15)' },
-  { title: '獲利策略', value: '89', icon: 'TrendCharts', gradient: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)', iconBg: 'rgba(17, 153, 142, 0.15)' },
-  { title: '平均報酬率', value: '+15.8%', icon: 'Coin', gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', iconBg: 'rgba(240, 147, 251, 0.15)' },
-  { title: '最佳策略', value: 'MA交叉', icon: 'Trophy', gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', iconBg: 'rgba(79, 172, 254, 0.15)' }
+  { title: '總回測次數', value: '-', icon: 'Document', gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', iconBg: 'rgba(102, 126, 234, 0.15)' },
+  { title: '獲利策略', value: '-', icon: 'TrendCharts', gradient: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)', iconBg: 'rgba(17, 153, 142, 0.15)' },
+  { title: '平均報酬率', value: '-', icon: 'Coin', gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', iconBg: 'rgba(240, 147, 251, 0.15)' },
+  { title: '最佳策略', value: '-', icon: 'Trophy', gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', iconBg: 'rgba(79, 172, 254, 0.15)' }
 ])
 
-const recentBacktests = ref([
-  { id: 1, name: '雙均線策略', stock: '2330.TW 台積電', return: '+18.5%', date: '2024-01-10', status: 'success' },
-  { id: 2, name: 'RSI 超賣反彈', stock: 'AAPL 蘋果', return: '+12.3%', date: '2024-01-09', status: 'success' },
-  { id: 3, name: 'MACD 交叉', stock: '2317.TW 鴻海', return: '-3.2%', date: '2024-01-08', status: 'danger' },
-  { id: 4, name: '布林通道突破', stock: 'NVDA 輝達', return: '+25.1%', date: '2024-01-07', status: 'success' }
-])
+const recentBacktests = ref([])
+
+const strategyNameMap = {
+  MA_CROSS: 'MA交叉',
+  RSI: 'RSI',
+  MACD: 'MACD',
+  BOLLINGER: '布林通道',
+  DCA: '定期定額',
+  SMA_BREAKOUT: 'SMA突破'
+}
+
+const fetchDashboard = async () => {
+  try {
+    loading.value = true
+    const response = await api.getDashboard()
+    const data = response.data
+
+    stats.value[0].value = String(data.stats.total_backtests)
+    stats.value[1].value = String(data.stats.profitable_backtests)
+    stats.value[2].value = data.stats.avg_return >= 0 
+      ? `+${data.stats.avg_return}%` 
+      : `${data.stats.avg_return}%`
+    stats.value[3].value = data.stats.best_strategy 
+      ? strategyNameMap[data.stats.best_strategy] || data.stats.best_strategy
+      : '-'
+
+    recentBacktests.value = data.recent_backtests.map(item => ({
+      id: item.id,
+      name: item.name,
+      stock: item.stock,
+      return: item.return_pct,
+      date: item.date,
+      status: item.status
+    }))
+  } catch (error) {
+    console.error('Failed to fetch dashboard data:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchDashboard()
+})
 </script>
 
 <template>
@@ -77,7 +117,10 @@ const recentBacktests = ref([
       </template>
       
       <!-- 桌面版表格 -->
-      <el-table :data="recentBacktests" style="width: 100%" class="hidden-xs-only">
+      <el-table :data="recentBacktests" style="width: 100%" class="hidden-xs-only" v-loading="loading">
+        <template #empty>
+          <el-empty description="尚無回測紀錄" :image-size="80" />
+        </template>
         <el-table-column prop="name" label="策略名稱" min-width="140" />
         <el-table-column prop="stock" label="股票" min-width="140" />
         <el-table-column prop="return" label="報酬率" min-width="100">
@@ -97,7 +140,8 @@ const recentBacktests = ref([
       </el-table>
 
       <!-- 手機版列表 (使用 div 模擬) -->
-      <div class="mobile-list hidden-sm-and-up">
+      <div class="mobile-list hidden-sm-and-up" v-loading="loading">
+        <el-empty v-if="!loading && recentBacktests.length === 0" description="尚無回測紀錄" :image-size="80" />
         <div v-for="item in recentBacktests" :key="item.id" class="mobile-item">
           <div class="mobile-item-header">
             <span class="mobile-item-title">{{ item.name }}</span>

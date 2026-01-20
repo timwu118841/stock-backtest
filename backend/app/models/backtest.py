@@ -222,3 +222,31 @@ class CompareRequest(BaseModel):
     """策略比較請求"""
 
     ids: List[int]
+
+
+class DashboardStats(BaseModel):
+    """儀表板統計資料"""
+
+    total_backtests: int
+    profitable_backtests: int
+    avg_return: float
+    best_strategy: Optional[str] = None
+    best_strategy_return: Optional[float] = None
+
+
+class DashboardRecentItem(BaseModel):
+    """儀表板最近回測項目"""
+
+    id: int
+    name: str
+    stock: str
+    return_pct: str
+    date: str
+    status: str  # success / warning / danger
+
+
+class DashboardResponse(BaseModel):
+    """儀表板回應"""
+
+    stats: DashboardStats
+    recent_backtests: List[DashboardRecentItem]

@@ -54,6 +54,10 @@ export default {
     return apiClient.post('/backtest/run', params)
   },
 
+  getDashboard() {
+    return apiClient.get('/backtest/dashboard')
+  },
+
   getHistory(params) {
     return apiClient.get('/backtest/history', { params })
   },
