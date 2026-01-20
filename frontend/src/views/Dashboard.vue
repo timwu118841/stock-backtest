@@ -2,10 +2,10 @@
 import { ref } from 'vue'
 
 const stats = ref([
-  { title: '總回測次數', value: '128', icon: 'Document', color: '#409eff', bg: 'rgba(64, 158, 255, 0.1)' },
-  { title: '獲利策略', value: '89', icon: 'TrendCharts', color: '#67c23a', bg: 'rgba(103, 194, 58, 0.1)' },
-  { title: '平均報酬率', value: '+15.8%', icon: 'Coin', color: '#e6a23c', bg: 'rgba(230, 162, 60, 0.1)' },
-  { title: '最佳策略', value: 'MA交叉', icon: 'Trophy', color: '#f56c6c', bg: 'rgba(245, 108, 108, 0.1)' }
+  { title: '總回測次數', value: '128', icon: 'Document', gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', iconBg: 'rgba(102, 126, 234, 0.15)' },
+  { title: '獲利策略', value: '89', icon: 'TrendCharts', gradient: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)', iconBg: 'rgba(17, 153, 142, 0.15)' },
+  { title: '平均報酬率', value: '+15.8%', icon: 'Coin', gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', iconBg: 'rgba(240, 147, 251, 0.15)' },
+  { title: '最佳策略', value: 'MA交叉', icon: 'Trophy', gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', iconBg: 'rgba(79, 172, 254, 0.15)' }
 ])
 
 const recentBacktests = ref([
@@ -20,22 +20,25 @@ const recentBacktests = ref([
   <div class="page-container dashboard">
     <!-- 統計卡片 -->
     <div class="stats-grid">
-      <el-card 
-        v-for="stat in stats" 
+      <div 
+        v-for="(stat, index) in stats" 
         :key="stat.title" 
-        class="stat-card" 
-        shadow="hover"
+        class="stat-card"
+        :style="{ '--card-index': index }"
       >
-        <div class="stat-content">
-          <div class="stat-info">
-            <span class="stat-title">{{ stat.title }}</span>
-            <span class="stat-value">{{ stat.value }}</span>
-          </div>
-          <div class="stat-icon" :style="{ color: stat.color, backgroundColor: stat.bg }">
-            <el-icon size="24"><component :is="stat.icon" /></el-icon>
+        <div class="stat-card-inner">
+          <div class="stat-gradient" :style="{ background: stat.gradient }"></div>
+          <div class="stat-content">
+            <div class="stat-info">
+              <span class="stat-title">{{ stat.title }}</span>
+              <span class="stat-value">{{ stat.value }}</span>
+            </div>
+            <div class="stat-icon" :style="{ background: stat.iconBg }">
+              <el-icon size="28"><component :is="stat.icon" /></el-icon>
+            </div>
           </div>
         </div>
-      </el-card>
+      </div>
     </div>
 
     <!-- 快速操作 -->
@@ -117,19 +120,61 @@ const recentBacktests = ref([
 .dashboard {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 28px;
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 20px;
+}
+
+.stat-card {
+  position: relative;
+  border-radius: var(--border-radius-lg, 12px);
+  overflow: hidden;
+  background: var(--app-sidebar-bg, #fff);
+  box-shadow: var(--shadow-md);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: fadeInUp 0.5s ease forwards;
+  animation-delay: calc(var(--card-index) * 0.1s);
+  opacity: 0;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-xl);
+}
+
+.stat-card-inner {
+  position: relative;
+}
+
+.stat-gradient {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  opacity: 0.9;
 }
 
 .stat-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 24px;
 }
 
 .stat-info {
@@ -139,34 +184,48 @@ const recentBacktests = ref([
 }
 
 .stat-title {
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary, #606266);
   font-size: 14px;
+  font-weight: 500;
 }
 
 .stat-value {
-  font-size: 28px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  font-family: 'Roboto Mono', monospace;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--app-text-color);
+  font-family: 'Roboto Mono', 'SF Mono', monospace;
+  letter-spacing: -0.5px;
 }
 
 .stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.3s;
+  color: var(--app-text-color);
+  transition: transform 0.3s ease;
 }
 
 .stat-card:hover .stat-icon {
-  transform: scale(1.1);
+  transform: scale(1.1) rotate(5deg);
+}
+
+html.dark .stat-card {
+  background: rgba(24, 24, 27, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+html.dark .stat-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .section-title {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
+  color: var(--app-text-color);
 }
 
 .card-header {
@@ -185,13 +244,19 @@ const recentBacktests = ref([
   flex: 1;
   min-width: 140px;
   height: auto;
-  padding: 20px;
+  padding: 24px 20px;
   justify-content: center;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  border-radius: var(--border-radius-lg, 12px);
+  font-weight: 500;
+  transition: all 0.25s ease;
 }
 
-/* Mobile List Styles */
+.action-btn:hover {
+  transform: translateY(-2px);
+}
+
 .hidden-xs-only {
   display: table;
 }
@@ -214,40 +279,58 @@ const recentBacktests = ref([
     gap: 12px;
   }
   
+  .stat-content {
+    padding: 16px;
+    flex-direction: column-reverse;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .stat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+  
   .stat-value {
-    font-size: 20px;
+    font-size: 24px;
   }
   
   .action-btn {
-    padding: 12px;
+    padding: 16px;
   }
 }
 
 .mobile-item {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  padding: 16px 0;
+  border-bottom: 1px solid var(--app-border-color);
+  transition: background-color 0.2s;
 }
 
 .mobile-item:last-child {
   border-bottom: none;
 }
 
+.mobile-item:hover {
+  background-color: var(--fintech-blue-light, rgba(59, 130, 246, 0.05));
+}
+
 .mobile-item-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .mobile-item-title {
-  font-weight: 500;
-  color: var(--el-text-color-primary);
+  font-weight: 600;
+  color: var(--app-text-color);
 }
 
 .mobile-item-sub {
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary, #606266);
   font-size: 13px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .mobile-item-footer {
@@ -257,7 +340,7 @@ const recentBacktests = ref([
 }
 
 .mobile-item-date {
-  color: var(--el-text-color-placeholder);
+  color: var(--app-text-secondary);
   font-size: 12px;
 }
 </style>

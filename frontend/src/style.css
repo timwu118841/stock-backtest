@@ -1,11 +1,38 @@
 :root {
   /* 基礎變數 */
   --el-color-primary: #409eff;
-  --app-bg-color: #f5f7fa;
+  --app-bg-color: #f0f2f5;
   --app-sidebar-bg: #ffffff;
   --app-header-bg: #ffffff;
   --app-text-color: #303133;
-  --app-border-color: #dcdfe6;
+  --app-text-secondary: #606266;
+  --app-border-color: #e4e7ed;
+  
+  /* 金融科技色彩系統 */
+  --fintech-profit: #10b981;
+  --fintech-profit-bg: rgba(16, 185, 129, 0.1);
+  --fintech-loss: #ef4444;
+  --fintech-loss-bg: rgba(239, 68, 68, 0.1);
+  --fintech-blue: #3b82f6;
+  --fintech-blue-light: rgba(59, 130, 246, 0.1);
+  --fintech-purple: #8b5cf6;
+  --fintech-purple-light: rgba(139, 92, 246, 0.1);
+  --fintech-amber: #f59e0b;
+  --fintech-amber-light: rgba(245, 158, 11, 0.1);
+  
+  /* 漸層 */
+  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-success: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  --gradient-warning: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  --gradient-blue: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  
+  /* 陰影系統 */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-glow-blue: 0 0 20px rgba(59, 130, 246, 0.3);
+  --shadow-glow-green: 0 0 20px rgba(16, 185, 129, 0.3);
   
   /* 統一間距 */
   --spacing-xs: 4px;
@@ -15,17 +42,43 @@
   --spacing-xl: 32px;
 
   /* 統一圓角 */
+  --border-radius-sm: 6px;
   --border-radius-base: 8px;
   --border-radius-lg: 12px;
+  --border-radius-xl: 16px;
+  
+  /* 過渡動畫 */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.25s ease;
+  --transition-slow: 0.35s ease;
 }
 
 /* 黑暗模式變數覆寫 */
 html.dark {
-  --app-bg-color: #141414;
-  --app-sidebar-bg: #1d1e1f;
-  --app-header-bg: #1d1e1f;
-  --app-text-color: #e5eaf3;
-  --app-border-color: #4c4d4f;
+  --app-bg-color: #0f0f12;
+  --app-sidebar-bg: #18181b;
+  --app-header-bg: #18181b;
+  --app-text-color: #f4f4f5;
+  --app-text-secondary: #a1a1aa;
+  --app-border-color: #27272a;
+  
+  --fintech-profit: #34d399;
+  --fintech-profit-bg: rgba(52, 211, 153, 0.15);
+  --fintech-loss: #f87171;
+  --fintech-loss-bg: rgba(248, 113, 113, 0.15);
+  --fintech-blue: #60a5fa;
+  --fintech-blue-light: rgba(96, 165, 250, 0.15);
+  --fintech-purple: #a78bfa;
+  --fintech-purple-light: rgba(167, 139, 250, 0.15);
+  --fintech-amber: #fbbf24;
+  --fintech-amber-light: rgba(251, 191, 36, 0.15);
+  
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+  --shadow-glow-blue: 0 0 25px rgba(96, 165, 250, 0.4);
+  --shadow-glow-green: 0 0 25px rgba(52, 211, 153, 0.4);
 }
 
 body {
@@ -36,34 +89,105 @@ body {
   color: var(--app-text-color);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.3s, color 0.3s;
+  transition: background-color var(--transition-base), color var(--transition-base);
 }
 
 /* 覆寫 Element Plus 樣式以適配主題 */
 .el-card {
   border-radius: var(--border-radius-lg) !important;
-  border: none !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
-  transition: all 0.3s ease;
+  border: 1px solid var(--app-border-color) !important;
+  box-shadow: var(--shadow-md) !important;
+  transition: all var(--transition-base);
+  background: var(--app-sidebar-bg) !important;
+}
+
+.el-card:hover {
+  box-shadow: var(--shadow-lg) !important;
+  transform: translateY(-2px);
 }
 
 html.dark .el-card {
-  background-color: #1d1e1f;
-  border: 1px solid #363637 !important;
-  box-shadow: none !important;
+  background: rgba(24, 24, 27, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(10px);
+}
+
+html.dark .el-card:hover {
+  border-color: rgba(255, 255, 255, 0.15) !important;
 }
 
 /* 統一頁面容器 */
 .page-container {
-  padding: var(--spacing-md);
+  padding: var(--spacing-lg);
   max-width: 1400px;
   margin: 0 auto;
+}
+
+/* 公用文字樣式 */
+.text-profit {
+  color: var(--fintech-profit) !important;
+  font-weight: 600;
+}
+
+.text-loss {
+  color: var(--fintech-loss) !important;
+  font-weight: 600;
+}
+
+/* 增強表格樣式 */
+.el-table {
+  --el-table-border-color: var(--app-border-color);
+  --el-table-header-bg-color: var(--app-bg-color);
+  border-radius: var(--border-radius-base) !important;
+  overflow: hidden;
+}
+
+.el-table th.el-table__cell {
+  background: var(--app-bg-color) !important;
+  font-weight: 600;
+  color: var(--app-text-color);
+}
+
+html.dark .el-table th.el-table__cell {
+  background: rgba(39, 39, 42, 0.5) !important;
+}
+
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+html.dark .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* 增強按鈕樣式 */
+.el-button--primary {
+  background: var(--gradient-primary) !important;
+  border: none !important;
+  box-shadow: 0 4px 14px 0 rgba(102, 126, 234, 0.4);
+  transition: all var(--transition-base);
+}
+
+.el-button--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px 0 rgba(102, 126, 234, 0.5);
+}
+
+/* 增強輸入框樣式 */
+.el-input__wrapper,
+.el-select__wrapper {
+  transition: all var(--transition-base) !important;
+}
+
+.el-input__wrapper:hover,
+.el-select__wrapper:hover {
+  box-shadow: 0 0 0 1px var(--el-color-primary) inset !important;
 }
 
 /* RWD 調整 */
 @media (max-width: 768px) {
   .page-container {
-    padding: var(--spacing-sm);
+    padding: var(--spacing-md);
   }
   
   .el-dialog {

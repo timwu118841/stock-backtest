@@ -598,53 +598,53 @@ const exportTradesCsv = () => {
     <div v-if="showResult && resultData" class="results-section">
       <!-- 績效指標 -->
       <div class="metrics-grid">
-        <el-card shadow="hover" class="metric-card">
+        <div class="metric-card">
           <div class="metric-label">總投入成本</div>
           <div class="metric-value">
             ${{ Number(resultData.summary.total_cost || 0).toLocaleString() }}
           </div>
-        </el-card>
-        <el-card shadow="hover" class="metric-card">
+        </div>
+        <div class="metric-card">
           <div class="metric-label">最終總資產</div>
           <div class="metric-value">
             ${{ Number(resultData.final_capital).toLocaleString() }}
           </div>
-        </el-card>
-        <el-card shadow="hover" class="metric-card">
+        </div>
+        <div class="metric-card">
           <div class="metric-label">總報酬率</div>
           <div class="metric-value" :class="resultData.summary.total_return >= 0 ? 'text-success' : 'text-danger'">
             {{ resultData.summary.total_return >= 0 ? '+' : '' }}{{ resultData.summary.total_return }}%
           </div>
-        </el-card>
-        <el-card shadow="hover" class="metric-card">
+        </div>
+        <div class="metric-card">
           <div class="metric-label">年化報酬率</div>
           <div class="metric-value" :class="resultData.summary.annualized_return >= 0 ? 'text-success' : 'text-danger'">
             {{ resultData.summary.annualized_return >= 0 ? '+' : '' }}{{ resultData.summary.annualized_return }}%
           </div>
-        </el-card>
-        <el-card shadow="hover" class="metric-card">
+        </div>
+        <div class="metric-card">
           <div class="metric-label">夏普比率</div>
           <div class="metric-value">{{ resultData.summary.sharpe_ratio }}</div>
-        </el-card>
-        <el-card shadow="hover" class="metric-card">
+        </div>
+        <div class="metric-card">
           <div class="metric-label">最大回撤</div>
           <div class="metric-value text-danger">{{ resultData.summary.max_drawdown }}%</div>
-        </el-card>
-        <el-card shadow="hover" class="metric-card">
+        </div>
+        <div class="metric-card">
           <div class="metric-label">勝率</div>
           <div class="metric-value">{{ resultData.summary.win_rate }}%</div>
-        </el-card>
-        <el-card shadow="hover" class="metric-card">
+        </div>
+        <div class="metric-card">
           <div class="metric-label">總交易次數</div>
           <div class="metric-value">{{ resultData.summary.total_trades }}</div>
-        </el-card>
-        <el-card shadow="hover" class="metric-card">
+        </div>
+        <div class="metric-card">
           <div class="metric-label">獲利 / 虧損</div>
           <div class="metric-value">
             <span class="text-success">{{ resultData.summary.profit_trades }}</span> / 
             <span class="text-danger">{{ resultData.summary.loss_trades }}</span>
           </div>
-        </el-card>
+        </div>
       </div>
 
       <!-- 圖表 -->
@@ -740,12 +740,13 @@ const exportTradesCsv = () => {
 .backtest {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 28px;
 }
 
 .section-title {
   font-weight: 600;
-  font-size: 16px;
+  font-size: 17px;
+  color: var(--app-text-color);
 }
 
 .card-header {
@@ -755,21 +756,25 @@ const exportTradesCsv = () => {
 }
 
 .form-actions {
-  margin-top: 24px;
+  margin-top: 28px;
   display: flex;
   justify-content: flex-end;
 }
 
 .run-btn {
   width: 100%;
-  max-width: 240px;
+  max-width: 260px;
+  height: 48px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: var(--border-radius-lg, 12px);
 }
 
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 @media (min-width: 768px) {
@@ -778,66 +783,151 @@ const exportTradesCsv = () => {
   }
 }
 
-@media (min-width: 1024px) {
-  .metrics-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (min-width: 1400px) {
+@media (min-width: 1200px) {
   .metrics-grid {
     grid-template-columns: repeat(5, 1fr);
   }
 }
 
-.metric-card { text-align: center; }
-.metric-label { font-size: 13px; color: var(--el-text-color-secondary); margin-bottom: 8px; }
-.metric-value { font-size: 22px; font-weight: 600; font-family: 'Roboto Mono', monospace; }
-
-.text-success { color: #67c23a; }
-.text-danger { color: #f56c6c; }
-
-.chart-card { margin-bottom: 24px; }
-.chart-container { width: 100%; height: 400px; }
-
-@media (max-width: 768px) {
-  .chart-container { height: 300px; }
+.metric-card {
+  text-align: center;
+  padding: 20px 16px;
+  border-radius: var(--border-radius-lg, 12px);
+  background: var(--app-sidebar-bg);
+  border: 1px solid var(--app-border-color);
+  transition: all 0.25s ease;
 }
 
-.mr-1 { margin-right: 4px; }
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+html.dark .metric-card {
+  background: rgba(24, 24, 27, 0.6);
+  border-color: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.metric-label {
+  font-size: 13px;
+  color: var(--app-text-secondary, #606266);
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.metric-value {
+  font-size: 24px;
+  font-weight: 700;
+  font-family: 'Roboto Mono', 'SF Mono', monospace;
+  letter-spacing: -0.5px;
+  color: var(--app-text-color);
+}
+
+.text-success {
+  color: var(--fintech-profit, #10b981) !important;
+}
+
+.text-danger {
+  color: var(--fintech-loss, #ef4444) !important;
+}
+
+.chart-card {
+  margin-bottom: 24px;
+  border-radius: var(--border-radius-lg, 12px);
+  overflow: hidden;
+}
+
+.chart-container {
+  width: 100%;
+  height: 420px;
+  padding: 16px;
+}
+
+@media (max-width: 768px) {
+  .chart-container {
+    height: 320px;
+    padding: 8px;
+  }
+  
+  .metric-value {
+    font-size: 20px;
+  }
+  
+  .metrics-grid {
+    gap: 12px;
+  }
+}
+
+.mr-1 {
+  margin-right: 4px;
+}
 
 .pagination-container {
-  margin-top: 16px;
+  margin-top: 20px;
   display: flex;
   justify-content: center;
 }
 
 .multi-stock-config {
-  margin-top: 16px;
-  padding: 16px;
-  background: var(--el-fill-color-light);
-  border-radius: 8px;
+  margin-top: 20px;
+  padding: 20px;
+  background: var(--app-bg-color);
+  border-radius: var(--border-radius-lg, 12px);
+  border: 1px solid var(--app-border-color);
+}
+
+html.dark .multi-stock-config {
+  background: rgba(15, 15, 18, 0.5);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .stock-allocation-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   font-weight: 600;
+  color: var(--app-text-color);
 }
 
 .stock-allocation-item {
-  margin-bottom: 12px;
-  padding: 12px;
-  background: var(--el-bg-color);
-  border-radius: 6px;
-  border: 1px solid var(--el-border-color);
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--app-sidebar-bg);
+  border-radius: var(--border-radius-base, 8px);
+  border: 1px solid var(--app-border-color);
+  transition: border-color 0.2s;
+}
+
+.stock-allocation-item:hover {
+  border-color: var(--el-color-primary);
+}
+
+html.dark .stock-allocation-item {
+  background: rgba(24, 24, 27, 0.4);
+  border-color: rgba(255, 255, 255, 0.06);
 }
 
 .form-help-text {
   font-size: 12px;
-  color: var(--el-text-color-secondary);
-  margin-top: 4px;
+  color: var(--app-text-secondary, #606266);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.results-section {
+  animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

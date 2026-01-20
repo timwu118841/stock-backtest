@@ -324,7 +324,8 @@ const getStatusText = (status) => {
 
 .section-title {
   font-weight: 600;
-  font-size: 16px;
+  font-size: 17px;
+  color: var(--app-text-color);
 }
 
 .card-header {
@@ -343,18 +344,40 @@ const getStatusText = (status) => {
   justify-content: flex-end;
 }
 
-.search-input { width: 200px; }
-.status-select { width: 110px; }
-
-@media (max-width: 576px) {
-  .card-header { flex-direction: column; align-items: stretch; }
-  .header-actions { justify-content: space-between; }
-  .search-input { width: 100%; order: 3; }
-  .status-select { flex: 1; }
+.search-input {
+  width: 220px;
 }
 
-.text-success { color: #67c23a; font-weight: 600; }
-.text-danger { color: #f56c6c; font-weight: 600; }
+.status-select {
+  width: 120px;
+}
+
+@media (max-width: 576px) {
+  .card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .header-actions {
+    justify-content: space-between;
+  }
+  .search-input {
+    width: 100%;
+    order: 3;
+  }
+  .status-select {
+    flex: 1;
+  }
+}
+
+.text-success {
+  color: var(--fintech-profit, #10b981) !important;
+  font-weight: 600;
+}
+
+.text-danger {
+  color: var(--fintech-loss, #ef4444) !important;
+  font-weight: 600;
+}
 
 .pagination-container {
   display: flex;
@@ -363,17 +386,80 @@ const getStatusText = (status) => {
 }
 
 @media (max-width: 768px) {
-  .pagination-container { justify-content: center; }
-  .hidden-xs-only { display: none; }
+  .pagination-container {
+    justify-content: center;
+  }
+  .hidden-xs-only {
+    display: none;
+  }
 }
 
-.mb-4 { margin-bottom: 16px; }
-.mr-1 { margin-right: 4px; }
-.section-subtitle { margin: 0; font-size: 15px; font-weight: 600; color: var(--el-text-color-primary); }
-.table-header { display: flex; justify-content: space-between; align-items: center; margin: 16px 0 12px; }
-.pagination-container {
-  margin-top: 16px;
+.mb-4 {
+  margin-bottom: 20px;
+}
+
+.mr-1 {
+  margin-right: 6px;
+}
+
+.section-subtitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--app-text-color);
+}
+
+.table-header {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
+  margin: 20px 0 16px;
+}
+
+.table-section {
+  margin-top: 8px;
+}
+
+.details-content {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+:deep(.el-descriptions) {
+  --el-descriptions-item-bordered-label-background: var(--app-bg-color);
+}
+
+html.dark :deep(.el-descriptions) {
+  --el-descriptions-item-bordered-label-background: rgba(39, 39, 42, 0.5);
+}
+
+:deep(.el-dialog) {
+  border-radius: var(--border-radius-xl, 16px);
+  overflow: hidden;
+}
+
+:deep(.el-dialog__header) {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--app-border-color);
+  margin: 0;
+}
+
+:deep(.el-dialog__body) {
+  padding: 24px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+html.dark :deep(.el-dialog) {
+  background: var(--app-sidebar-bg);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 </style>

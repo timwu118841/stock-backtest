@@ -195,7 +195,6 @@ const isLoginPage = computed(() => route.path === '/login')
   color: var(--app-text-color);
 }
 
-/* Sidebar Styles */
 .sidebar {
   background-color: var(--app-sidebar-bg);
   border-right: 1px solid var(--app-border-color);
@@ -205,63 +204,84 @@ const isLoginPage = computed(() => route.path === '/login')
   z-index: 100;
 }
 
+html.dark .sidebar {
+  background: linear-gradient(180deg, rgba(24, 24, 27, 0.95) 0%, rgba(15, 15, 18, 0.98) 100%);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
 .logo {
-  height: 64px;
+  height: 68px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
   border-bottom: 1px solid var(--app-border-color);
   overflow: hidden;
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.05) 0%, transparent 100%);
+}
+
+html.dark .logo {
+  border-color: rgba(255, 255, 255, 0.06);
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.08) 0%, transparent 100%);
 }
 
 .logo-text {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
   white-space: nowrap;
   color: var(--app-text-color);
+  letter-spacing: -0.3px;
 }
 
 .sidebar-menu {
   border-right: none;
   flex: 1;
+  padding: 8px 0;
 }
 
 :deep(.el-menu-item) {
-  height: 56px;
-  margin: 4px 8px;
-  border-radius: 8px;
+  height: 52px;
+  margin: 4px 10px;
+  border-radius: 10px;
   color: var(--app-text-color);
+  transition: all 0.2s ease;
 }
 
 :deep(.el-menu-item.is-active) {
-  background-color: var(--el-color-primary-light-9);
-  color: var(--el-color-primary);
+  background: linear-gradient(135deg, var(--el-color-primary) 0%, #764ba2 100%);
+  color: #fff;
   font-weight: 600;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
 html.dark :deep(.el-menu-item.is-active) {
-  background-color: rgba(64, 158, 255, 0.2);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.5);
 }
 
-:deep(.el-menu-item:hover) {
-  background-color: rgba(0, 0, 0, 0.05);
+:deep(.el-menu-item:not(.is-active):hover) {
+  background-color: rgba(64, 158, 255, 0.08);
 }
 
-html.dark :deep(.el-menu-item:hover) {
-  background-color: rgba(255, 255, 255, 0.05);
+html.dark :deep(.el-menu-item:not(.is-active):hover) {
+  background-color: rgba(255, 255, 255, 0.06);
 }
 
-/* Header Styles */
 .header {
-  height: 64px;
+  height: 68px;
   background-color: var(--app-header-bg);
   border-bottom: 1px solid var(--app-border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
-  transition: background-color 0.3s;
+  padding: 0 24px;
+  transition: background-color 0.25s;
+}
+
+html.dark .header {
+  background: rgba(24, 24, 27, 0.8);
+  backdrop-filter: blur(12px);
+  border-color: rgba(255, 255, 255, 0.06);
 }
 
 .header-left {
@@ -272,32 +292,36 @@ html.dark :deep(.el-menu-item:hover) {
 
 .collapse-btn {
   cursor: pointer;
-  padding: 8px;
-  border-radius: 4px;
+  padding: 10px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
 }
 
 .collapse-btn:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: rgba(64, 158, 255, 0.1);
+  transform: scale(1.05);
 }
 
 html.dark .collapse-btn:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 .page-title {
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 700;
   margin: 0;
   color: var(--app-text-color);
+  letter-spacing: -0.3px;
 }
 
 .status-tag {
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
 }
 
 .status-text {
@@ -310,7 +334,6 @@ html.dark .collapse-btn:hover {
   }
 }
 
-/* Main Content Styles */
 .main-container {
   flex-direction: column;
   height: 100vh;
@@ -318,23 +341,22 @@ html.dark .collapse-btn:hover {
 }
 
 .content-wrapper {
-  padding: 20px;
+  padding: 24px;
   overflow-y: auto;
   background-color: var(--app-bg-color);
 }
 
-/* Transitions */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+  transform: translateY(8px);
 }
 
-/* Mobile Adjustments */
 @media (max-width: 768px) {
   .content-wrapper {
     padding: 16px;
@@ -345,7 +367,6 @@ html.dark .collapse-btn:hover {
   }
 }
 
-/* User Info Styles */
 .login-wrapper {
   min-height: 100vh;
 }
@@ -353,19 +374,20 @@ html.dark .collapse-btn:hover {
 .user-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 8px;
-  margin-right: 12px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  margin-right: 16px;
+  transition: all 0.2s ease;
 }
 
 .user-info:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: rgba(64, 158, 255, 0.08);
 }
 
 html.dark .user-info:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(255, 255, 255, 0.06);
 }
 
 .user-name {
@@ -374,6 +396,7 @@ html.dark .user-info:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
+  font-weight: 500;
   color: var(--app-text-color);
 }
 
@@ -386,5 +409,17 @@ html.dark .user-info:hover {
 .header-right {
   display: flex;
   align-items: center;
+}
+
+:deep(.el-switch) {
+  --el-switch-on-color: #667eea;
+}
+
+.mobile-drawer :deep(.el-drawer__body) {
+  padding: 0;
+}
+
+.mobile-logo {
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.08) 0%, transparent 100%);
 }
 </style>
